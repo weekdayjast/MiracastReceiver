@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls /d)",
+      "Read(//mnt/**)",
+      "Bash(java:*)",
+      "Bash(winget:*)",
+      "Read(//c/Program Files/Android/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(mkdir:*)",
+      "Bash(unzip:*)",
+      "Bash(yes:*)",
+      "Bash(\"/d/develop/android-sdk/platform-tools/adb.exe\" version:*)"
+    ]
+  }
+}
