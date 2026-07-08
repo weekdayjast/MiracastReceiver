@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Miracast Receiver</string>
+    <string name="device_name">智能电视</string>
+    <string name="waiting_connection">等待投屏连接...</string>
+    <string name="device_ip">设备 IP: %s</string>
+    <string name="device_info">设备信息</string>
+    <string name="connection_code">连接码: %s</string>
+    <string name="how_to_connect">如何连接</string>
+    <string name="connect_instruction">1. 确保发送设备与电视在同一局域网\n2. 打开发送端应用\n3. 扫描并选择此设备\n4. 开始投屏</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">投屏连接请求</string>
+    <string name="device_request">设备 %s 请求投屏</string>
+    <string name="allow">允许</string>
+    <string name="deny">拒绝</string>
+    <string name="remember_device">记住此设备</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">已连接</string>
+    <string name="playing">正在播放</string>
+    <string name="disconnect">断开连接</string>
+    <string name="pause">暂停</string>
+    <string name="resume">继续</string>
+
+    <!-- 设置 -->
+    <string name="settings">设置</string>
+    <string name="device_name_setting">设备名称</string>
+    <string name="require_confirmation">需要连接确认</string>
+    <string name="enable_pin">启用 PIN 码</string>
+    <string name="max_resolution">最大分辨率</string>
+    <string name="max_framerate">最大帧率</string>
+    <string name="network_diagnostics">网络诊断</string>
+    <string name="export_logs">导出日志</string>
+
+    <!-- 错误消息 -->
+    <string name="error_network">网络错误</string>
+    <string name="error_connection_failed">连接失败</string>
+    <string name="error_playback">播放错误</string>
+    <string name="error_unknown">未知错误</string>
+</resources>
