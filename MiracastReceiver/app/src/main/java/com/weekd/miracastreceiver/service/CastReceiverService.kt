@@ -17,6 +17,8 @@ import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.dlna.DlnaMediaRenderer
 import com.weekd.miracastreceiver.dlna.SsdpServer
 import com.weekd.miracastreceiver.dlna.UpnpHttpServer
+import com.weekd.miracastreceiver.miracast.WfdServer
+import com.weekd.miracastreceiver.miracast.WifiDirectManager
 import com.weekd.miracastreceiver.utils.NetworkUtils
 import timber.log.Timber
 import java.util.UUID
@@ -38,6 +40,8 @@ class CastReceiverService : Service() {
     private lateinit var dlnaRenderer: DlnaMediaRenderer
     private lateinit var ssdpServer: SsdpServer
     private lateinit var upnpHttpServer: UpnpHttpServer
+    private lateinit var wfdServer: WfdServer
+    private lateinit var wifiDirectManager: WifiDirectManager
     private lateinit var deviceUuid: String
 
     private val playerStateReceiver = object : BroadcastReceiver() {
@@ -65,9 +69,39 @@ class CastReceiverService : Service() {
         // 初始化 AirPlay 服务器
         airPlayServer = AirPlayServer(this)
 
+        // 初始化 Windows 无线显示器（Miracast/WFD）服务器
+        initWfdServer()
+
         // 初始化 DLNA/UPnP 服务
         initDlnaServices()
         registerReceiver(playerStateReceiver, IntentFilter(ACTION_UPDATE_POSITION), RECEIVER_NOT_EXPORTED)
+    }
+
+    private fun initWfdServer() {
+        wfdServer = WfdServer(this, 7236).apply {
+            onConnectionRequested = { clientName, clientAddress ->
+                Timber.i("Miracast connection requested: $clientName from $clientAddress")
+            }
+            onConnectionEstablished = { sessionId ->
+                Timber.i("Miracast session established: $sessionId")
+            }
+            onStreamStarted = { rtpPort ->
+                Timber.i("Miracast stream started on RTP port: $rtpPort")
+            }
+            onStreamStopped = {
+                Timber.i("Miracast stream stopped")
+            }
+        }
+
+        // 初始化 Wi-Fi Direct 以支持 Windows 无线显示器发现
+        wifiDirectManager = WifiDirectManager(this).apply {
+            onGroupCreated = { group ->
+                Timber.i("Wi-Fi Direct group created for Miracast: ${group.networkName}")
+            }
+            onDeviceConnected = { device ->
+                Timber.i("Miracast device connected: ${device.deviceName}")
+            }
+        }
     }
 
     private fun initDlnaServices() {
@@ -203,7 +237,11 @@ class CastReceiverService : Service() {
         upnpHttpServer.start()
         ssdpServer.start()
 
-        Timber.i("All cast services started (AirPlay + DLNA)")
+        // 启动 Windows 无线显示器（Miracast/WFD）RTSP 服务
+        wfdServer.start()
+        wifiDirectManager.start()
+
+        Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD)")
 
         return START_STICKY
     }
@@ -226,6 +264,10 @@ class CastReceiverService : Service() {
         // 停止 DLNA/UPnP 服务
         ssdpServer.stop()
         upnpHttpServer.stop()
+
+        // 停止 Miracast/WFD 服务
+        wifiDirectManager.stop()
+        wfdServer.stop()
     }
 
     private fun generateDeviceUuid(): String {
@@ -253,7 +295,7 @@ class CastReceiverService : Service() {
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("正在等待 AirPlay/DLNA 投屏连接")
+            .setContentText("正在等待 AirPlay/DLNA/Miracast 投屏连接")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

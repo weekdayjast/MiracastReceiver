@@ -182,17 +182,35 @@ object SoapParser {
     }
 
     fun extractTagValue(xml: String, tagName: String): String {
+        // 尝试多种模式匹配，提高兼容性
         val patterns = listOf(
+            // 标准格式：<tagName>value</tagName>
             Pattern.compile("<$tagName>(.*?)</$tagName>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE),
-            Pattern.compile("<[^:>]+:$tagName>(.*?)</[^:>]+:$tagName>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
+            // 命名空间格式：<prefix:tagName>value</prefix:tagName>
+            Pattern.compile("<[^:>]+:$tagName>(.*?)</[^:>]+:$tagName>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE),
+            // CDATA 格式：<tagName><![CDATA[value]]></tagName>
+            Pattern.compile("<$tagName><!\\[CDATA\\[(.*?)\\]\\]></$tagName>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE),
+            // 属性格式（有些客户端把值放在属性里）
+            Pattern.compile("<$tagName[^>]*>\\s*<!\\[CDATA\\[(.*?)\\]\\]>\\s*</$tagName>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
         )
 
         for (pattern in patterns) {
             val matcher = pattern.matcher(xml)
             if (matcher.find()) {
-                return matcher.group(1)?.trim().orEmpty()
+                val value = matcher.group(1)?.trim().orEmpty()
+                if (value.isNotEmpty()) {
+                    return value
+                }
             }
         }
+
+        // 如果都没匹配到，尝试直接搜索标签名（不区分大小写）
+        val fallbackPattern = Pattern.compile("<[^>]*${tagName}[^>]*>(.*?)</[^>]*>", Pattern.DOTALL or Pattern.CASE_INSENSITIVE)
+        val fallbackMatcher = fallbackPattern.matcher(xml)
+        if (fallbackMatcher.find()) {
+            return fallbackMatcher.group(1)?.trim().orEmpty()
+        }
+
         return ""
     }
 

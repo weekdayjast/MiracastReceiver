@@ -149,13 +149,38 @@ class UpnpHttpServer(
 
     private fun handleAvTransportControl(output: OutputStream, body: String, headers: Map<String, String>) {
         val action = SoapParser.extractAction(headers["SOAPACTION"] ?: headers["SOAPAction"])
-        Timber.i("AVTransport action: $action, body: ${body.take(500)}")
+        Timber.i("AVTransport action: $action")
+
+        // 调试：打印完整请求体，帮助排查 Emby 的格式
+        if (action == "SetAVTransportURI") {
+            Timber.d("SetAVTransportURI body (first 1000 chars): ${body.take(1000)}")
+        }
 
         val response = when (action) {
             "SetAVTransportURI" -> {
                 val uri = SoapParser.extractTagValue(body, "CurrentURI")
                 val metadata = SoapParser.extractTagValue(body, "CurrentURIMetaData")
-                renderer.setAVTransportURI(uri, metadata)
+
+                // 如果 URI 为空，记录错误并尝试更宽松的解析
+                if (uri.isBlank()) {
+                    Timber.e("SetAVTransportURI: Empty URI! Trying fallback parsing...")
+                    Timber.e("Request body: $body")
+
+                    // 尝试其他可能的标签名
+                    val fallbackUri = listOf("URI", "Url", "MediaUri", "CurrentUri").firstNotNullOfOrNull { tag ->
+                        val value = SoapParser.extractTagValue(body, tag)
+                        if (value.isNotBlank()) value else null
+                    } ?: ""
+
+                    if (fallbackUri.isNotBlank()) {
+                        Timber.i("Found URI via fallback: $fallbackUri")
+                        renderer.setAVTransportURI(fallbackUri, metadata)
+                    } else {
+                        renderer.setAVTransportURI(uri, metadata)
+                    }
+                } else {
+                    renderer.setAVTransportURI(uri, metadata)
+                }
                 buildSoapResponse(action, "")
             }
             "SetNextAVTransportURI" -> {

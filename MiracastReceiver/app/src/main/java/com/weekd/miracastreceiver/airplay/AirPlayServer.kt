@@ -33,12 +33,17 @@ class AirPlayServer(private val context: Context) {
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private var mirroringReceiver: AirPlayMirroringReceiver? = null
+    private var currentSession: String? = null
 
     fun start(port: Int = DEFAULT_PORT) {
         if (serverJob?.isActive == true) {
             Timber.w("AirPlay server already running")
             return
         }
+
+        // 初始化镜像接收器
+        mirroringReceiver = AirPlayMirroringReceiver(context)
 
         serverJob = scope.launch {
             try {
@@ -63,6 +68,9 @@ class AirPlayServer(private val context: Context) {
         try {
             serverJob?.cancel()
             serverSocket?.close()
+            mirroringReceiver?.stop()
+            mirroringReceiver = null
+            currentSession = null
             Timber.i("AirPlay server stopped")
         } catch (e: Exception) {
             Timber.e(e, "Error stopping AirPlay server")
@@ -138,12 +146,27 @@ class AirPlayServer(private val context: Context) {
                     requestLine.startsWith("POST /command") -> {
                         if (isRtsp) sendRtspOk(output, cseq) else sendOk(output)
                     }
-                    requestLine.startsWith("SETUP") -> sendRtspSetup(output, cseq)
-                    requestLine.startsWith("TEARDOWN") -> sendRtspOk(output, cseq)
+                    requestLine.startsWith("SETUP") -> {
+                        handleRtspSetup(headers)
+                        sendRtspSetup(output, cseq)
+                    }
+                    requestLine.startsWith("TEARDOWN") -> {
+                        handleRtspTeardown()
+                        sendRtspOk(output, cseq)
+                    }
                     requestLine.startsWith("GET_PARAMETER") -> sendRtspOk(output, cseq)
-                    requestLine.startsWith("SET_PARAMETER") -> sendRtspOk(output, cseq)
-                    requestLine.startsWith("RECORD") -> sendRtspOk(output, cseq)
-                    requestLine.startsWith("FLUSH") -> sendRtspOk(output, cseq)
+                    requestLine.startsWith("SET_PARAMETER") -> {
+                        handleRtspSetParameter(headers, reader)
+                        sendRtspOk(output, cseq)
+                    }
+                    requestLine.startsWith("RECORD") -> {
+                        handleRtspRecord()
+                        sendRtspOk(output, cseq)
+                    }
+                    requestLine.startsWith("FLUSH") -> {
+                        handleRtspFlush()
+                        sendRtspOk(output, cseq)
+                    }
                     requestLine.startsWith("OPTIONS") -> sendRtspOptions(output, cseq)
                     else -> {
                         Timber.w("Unsupported AirPlay request: $requestLine")
@@ -222,6 +245,29 @@ class AirPlayServer(private val context: Context) {
                 <key>sourceVersion</key><string>366.0</string>
                 <key>statusFlags</key><integer>68</integer>
                 <key>vv</key><integer>2</integer>
+                <key>audioFormats</key>
+                <array>
+                    <dict>
+                        <key>type</key><integer>96</integer>
+                        <key>audioInputFormats</key><integer>16777216</integer>
+                        <key>audioOutputFormats</key><integer>16777216</integer>
+                    </dict>
+                </array>
+                <key>displays</key>
+                <array>
+                    <dict>
+                        <key>uuid</key><string>e0ff8a27-6738-3d56-8a16-cc53aacee925</string>
+                        <key>width</key><integer>1920</integer>
+                        <key>height</key><integer>1080</integer>
+                        <key>widthPhysical</key><integer>0</integer>
+                        <key>heightPhysical</key><integer>0</integer>
+                        <key>widthPixels</key><integer>1920</integer>
+                        <key>heightPixels</key><integer>1080</integer>
+                        <key>refreshRate</key><real>60.0</real>
+                        <key>rotation</key><integer>0</integer>
+                        <key>overscanned</key><false/>
+                    </dict>
+                </array>
             </dict>
             </plist>
         """.trimIndent()
@@ -281,10 +327,12 @@ class AirPlayServer(private val context: Context) {
             "Transport: RTP/AVP/UDP;unicast;mode=record;server_port=6000;control_port=6001;timing_port=6002\r\n" +
             "Session: 1\r\n" +
             "Audio-Jack-Status: connected\r\n" +
+            "Audio-Latency: 0\r\n" +
             "Server: AirTunes/366.0\r\n" +
             "\r\n"
         output.write(response.toByteArray())
         output.flush()
+        Timber.i("RTSP SETUP response sent")
     }
 
     private fun sendRtspOk(output: OutputStream, cseq: String?) {
@@ -385,4 +433,95 @@ class AirPlayServer(private val context: Context) {
             null
         }
     }
+
+    /**
+     * 处理 RTSP SETUP 请求
+     */
+    private fun handleRtspSetup(headers: Map<String, String>) {
+        try {
+            currentSession = "AIRPLAY-${System.currentTimeMillis()}"
+
+            // 解析 Transport 头
+            val transport = headers["Transport"] ?: headers["transport"]
+            Timber.i("AirPlay SETUP - Transport: $transport")
+
+            // 启动镜像接收器
+            mirroringReceiver?.start()
+
+        } catch (e: Exception) {
+            Timber.e(e, "Error handling RTSP SETUP")
+        }
+    }
+
+    /**
+     * 处理 RTSP RECORD 请求（开始镜像）
+     */
+    private fun handleRtspRecord() {
+        try {
+            Timber.i("AirPlay RECORD - Starting mirroring")
+
+            // 启动 PlayerActivity 以显示镜像画面
+            val intent = Intent(context, PlayerActivity::class.java).apply {
+                putExtra(PlayerActivity.EXTRA_MEDIA_TITLE, "iPhone 屏幕镜像")
+                putExtra(PlayerActivity.EXTRA_IS_AIRPLAY_MIRROR, true)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            }
+            context.startActivity(intent)
+
+        } catch (e: Exception) {
+            Timber.e(e, "Error handling RTSP RECORD")
+        }
+    }
+
+    /**
+     * 处理 RTSP TEARDOWN 请求
+     */
+    private fun handleRtspTeardown() {
+        try {
+            Timber.i("AirPlay TEARDOWN - Stopping mirroring")
+
+            mirroringReceiver?.stop()
+            currentSession = null
+
+            // 停止播放
+            context.sendBroadcast(Intent(PlayerActivity.ACTION_STOP).setPackage(context.packageName))
+
+        } catch (e: Exception) {
+            Timber.e(e, "Error handling RTSP TEARDOWN")
+        }
+    }
+
+    /**
+     * 处理 RTSP FLUSH 请求
+     */
+    private fun handleRtspFlush() {
+        try {
+            Timber.i("AirPlay FLUSH - Flushing buffers")
+            // 简化版：暂不处理缓冲区刷新
+        } catch (e: Exception) {
+            Timber.e(e, "Error handling RTSP FLUSH")
+        }
+    }
+
+    /**
+     * 处理 RTSP SET_PARAMETER 请求
+     */
+    private fun handleRtspSetParameter(headers: Map<String, String>, reader: BufferedReader) {
+        try {
+            val contentLength = headers["Content-Length"]?.toIntOrNull() ?: 0
+            if (contentLength > 0) {
+                val body = CharArray(contentLength)
+                reader.read(body, 0, contentLength)
+                val bodyStr = String(body)
+                Timber.d("AirPlay SET_PARAMETER body: $bodyStr")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error handling RTSP SET_PARAMETER")
+        }
+    }
+
+    /**
+     * 获取镜像接收器（供 PlayerActivity 使用）
+     */
+    fun getMirroringReceiver(): AirPlayMirroringReceiver? = mirroringReceiver
 }

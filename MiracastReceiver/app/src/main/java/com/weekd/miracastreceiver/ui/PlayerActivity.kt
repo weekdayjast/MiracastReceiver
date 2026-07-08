@@ -14,16 +14,19 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.view.SurfaceView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.weekd.miracastreceiver.R
+import com.weekd.miracastreceiver.miracast.RtpReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -44,6 +47,12 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_MEDIA_URIS = "media_uris"
         const val EXTRA_MEDIA_TITLES = "media_titles"
         const val EXTRA_START_INDEX = "start_index"
+        const val EXTRA_IS_AIRPLAY_MIRROR = "is_airplay_mirror"
+
+        // Miracast 额外参数
+        const val EXTRA_SOURCE_TYPE = "SOURCE_TYPE"
+        const val EXTRA_RTP_PORT = "RTP_PORT"
+        const val EXTRA_SESSION_ID = "SESSION_ID"
 
         // 广播 Action
         const val ACTION_PLAY = "com.weekd.miracastreceiver.ACTION_PLAY"
@@ -81,6 +90,8 @@ class PlayerActivity : AppCompatActivity() {
     private var slideJob: Job? = null
     private var progressUpdateJob: Job? = null
     private var qualityHeight: Int = QUALITY_AUTO
+    private var rtpReceiver: RtpReceiver? = null
+    private var isMiracastSession = false
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -211,6 +222,11 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "MIRACAST") {
+            startMiracastPlayback(intent.getIntExtra(EXTRA_RTP_PORT, 0), intent.getStringExtra(EXTRA_SESSION_ID))
+            return
+        }
+
         val list = intent?.getStringArrayListExtra(EXTRA_MEDIA_URIS)
             ?: intent?.getStringExtra(EXTRA_MEDIA_URI)?.let { arrayListOf(it) }
             ?: arrayListOf()
@@ -239,24 +255,66 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    private fun startMiracastPlayback(rtpPort: Int, sessionId: String?) {
+        if (rtpPort <= 0) {
+            tvStatus.text = "Miracast 连接错误"
+            tvError.text = "无效的 RTP 端口"
+            tvError.visibility = View.VISIBLE
+            return
+        }
+
+        Timber.i("Starting Miracast playback: port=$rtpPort session=$sessionId")
+        isMiracastSession = true
+        stopImageSlideShow()
+        player?.pause()
+        playerView.visibility = View.VISIBLE
+        imageView.visibility = View.GONE
+        tvTitle.text = "Windows 无线显示器"
+        tvStatus.text = "正在接收 Windows 屏幕..."
+        tvError.visibility = View.GONE
+        updateBufferingState(false)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+
+        playerView.post {
+            val surface = (playerView.videoSurfaceView as? SurfaceView)?.holder?.surface
+            rtpReceiver?.stop()
+            rtpReceiver = RtpReceiver(rtpPort).apply {
+                onError = { message ->
+                    runOnUiThread {
+                        tvStatus.text = "Miracast 播放错误"
+                        tvError.text = message
+                        tvError.visibility = View.VISIBLE
+                    }
+                }
+                start(surface)
+            }
+        }
+    }
+
     private fun playMedia(uri: String) {
         Timber.i("Playing media: $uri")
         stopImageSlideShow()
         imageView.visibility = View.GONE
         playerView.visibility = View.VISIBLE
-        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         try {
             tvError.visibility = View.GONE
             updateBufferingState(true)
+
+            // 根据 URI 判断媒体类型
+            val mediaItem = createMediaItem(uri)
+
             val items = playlist.mapIndexedNotNull { index, itemUri ->
-                if (!isImageUri(itemUri)) MediaItem.fromUri(itemUri).also { if (index == currentIndex) mediaUri = itemUri } else null
+                if (!isImageUri(itemUri)) {
+                    createMediaItem(itemUri).also { if (index == currentIndex) mediaUri = itemUri }
+                } else null
             }
             if (playlist.size > 1 && items.isNotEmpty()) {
                 val videoIndex = playlist.take(currentIndex + 1).count { !isImageUri(it) } - 1
                 player?.setMediaItems(items, videoIndex.coerceAtLeast(0), 0L)
             } else {
-                player?.setMediaItem(MediaItem.fromUri(uri))
+                player?.setMediaItem(mediaItem)
             }
             player?.prepare()
             player?.play()
@@ -266,6 +324,22 @@ class PlayerActivity : AppCompatActivity() {
             tvError.text = "播放错误: ${e.message ?: "未知错误"}"
             tvError.visibility = View.VISIBLE
             updateBufferingState(false)
+        }
+    }
+
+    private fun createMediaItem(uri: String): MediaItem {
+        // 检测 HLS 流
+        val isHls = uri.contains(".m3u8") || uri.contains("/playlist/m3u8")
+
+        return if (isHls) {
+            // HLS 流：明确指定 MIME 类型
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMimeType(MimeTypes.APPLICATION_M3U8)
+                .build()
+        } else {
+            // 其他格式：让 ExoPlayer 自动检测
+            MediaItem.fromUri(uri)
         }
     }
 
@@ -388,13 +462,9 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun adaptOrientationToVideo() {
-        val size = player?.videoSize ?: return
-        if (size.width <= 0 || size.height <= 0) return
-        requestedOrientation = if (size.width >= size.height) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        }
+        // TV 端固定横屏显示，竖屏视频由播放器按比例居中渲染。
+        // 不再根据视频宽高切换 Activity 方向，避免 Surface 重建导致竖屏投屏反复缓冲/黑屏。
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     }
 
     private fun adaptOrientationToImage(width: Int, height: Int) {
@@ -486,6 +556,8 @@ class PlayerActivity : AppCompatActivity() {
             Timber.e(e, "Error unregistering receiver")
         }
         stopImageSlideShow()
+        rtpReceiver?.stop()
+        rtpReceiver = null
         player?.release()
         player = null
         Timber.i("PlayerActivity destroyed")
