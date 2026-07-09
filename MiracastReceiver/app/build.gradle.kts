@@ -27,6 +27,20 @@ android {
         }
     }
 
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            val abiFilter = when {
+                project.hasProperty("buildArm64") -> listOf("arm64-v8a")
+                project.hasProperty("buildArm32") -> listOf("armeabi-v7a")
+                else -> listOf("arm64-v8a", "armeabi-v7a")
+            }
+            include(*abiFilter.toTypedArray())
+            isUniversalApk = !project.hasProperty("buildArm64") && !project.hasProperty("buildArm32")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
