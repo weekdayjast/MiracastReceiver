@@ -11,10 +11,21 @@ android {
         applicationId = "com.weekd.miracastreceiver"
         minSdk = 21
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        ndk {
+            abiFilters += setOf("armeabi-v7a", "arm64-v8a")
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
@@ -95,6 +106,10 @@ dependencies {
 
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
+
+    // AirPlay 2 handshake dependencies
+    implementation("org.bouncycastle:bcprov-jdk18on:1.78.1")
+    implementation("com.googlecode.plist:dd-plist:1.28")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

@@ -18,6 +18,14 @@
         app:controller_layout_id="@layout/custom_player_control"
         app:surface_type="surface_view" />
 
+    <!-- AirPlay 镜像专用 Surface。不要复用 PlayerView 的 Surface，避免 ExoPlayer shutter 黑色遮罩盖住 MediaCodec 输出。 -->
+    <SurfaceView
+        android:id="@+id/airplay_mirror_surface"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
     <!-- 图片轮播视图 -->
     <ImageView
         android:id="@+id/image_view"

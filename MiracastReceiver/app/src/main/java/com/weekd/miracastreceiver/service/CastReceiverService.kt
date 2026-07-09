@@ -10,9 +10,11 @@ import android.os.Build
 import android.os.IBinder
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.hardware.display.DisplayManager
+import android.view.Display
 import androidx.core.app.NotificationCompat
 import com.weekd.miracastreceiver.R
-import com.weekd.miracastreceiver.airplay.AirPlayServer
+import com.weekd.miracastreceiver.airplay.AirPlayReceiver
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.dlna.DlnaMediaRenderer
 import com.weekd.miracastreceiver.dlna.SsdpServer
@@ -36,13 +38,14 @@ class CastReceiverService : Service() {
         private const val ACTION_UPDATE_POSITION = "com.weekd.miracastreceiver.ACTION_UPDATE_POSITION"
     }
 
-    private lateinit var airPlayServer: AirPlayServer
+    private lateinit var airPlayReceiver: AirPlayReceiver
     private lateinit var dlnaRenderer: DlnaMediaRenderer
     private lateinit var ssdpServer: SsdpServer
     private lateinit var upnpHttpServer: UpnpHttpServer
     private lateinit var wfdServer: WfdServer
     private lateinit var wifiDirectManager: WifiDirectManager
     private lateinit var deviceUuid: String
+    private var airPlayPlayerStarted = false
 
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -66,8 +69,33 @@ class CastReceiverService : Service() {
         // 初始化设备 UUID
         deviceUuid = generateDeviceUuid()
 
-        // 初始化 AirPlay 服务器
-        airPlayServer = AirPlayServer(this)
+        val mirrorResolution = getBestDisplayResolution()
+        Timber.i("AirPlay mirror advertised resolution: ${mirrorResolution.first}x${mirrorResolution.second}")
+
+        // 初始化 AirPlay 2 接收器（基于 PhairPlay 实现，支持 iOS 屏幕镜像）
+        airPlayReceiver = AirPlayReceiver(
+            context = this,
+            displayName = getString(R.string.app_name),
+            mirrorWidth = mirrorResolution.first,
+            mirrorHeight = mirrorResolution.second,
+            audioEnabled = true,
+            videoSurfaceProvider = { com.weekd.miracastreceiver.ui.PlayerActivity.airPlayMirrorSurface },
+            onStateChanged = { state ->
+                Timber.i("AirPlay state: $state")
+                if (state == com.weekd.miracastreceiver.airplay.AirPlayState.CONNECTED && !airPlayPlayerStarted) {
+                    airPlayPlayerStarted = true
+                    val intent = Intent(this, com.weekd.miracastreceiver.ui.PlayerActivity::class.java).apply {
+                        putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_TITLE, "iPhone 屏幕镜像")
+                        putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_IS_AIRPLAY_MIRROR, true)
+                        flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    }
+                    startActivity(intent)
+                } else if (state != com.weekd.miracastreceiver.airplay.AirPlayState.CONNECTED) {
+                    airPlayPlayerStarted = false
+                }
+            },
+            onSenderNameChanged = { sender -> Timber.i("AirPlay sender: $sender") }
+        )
 
         // 初始化 Windows 无线显示器（Miracast/WFD）服务器
         initWfdServer()
@@ -75,6 +103,20 @@ class CastReceiverService : Service() {
         // 初始化 DLNA/UPnP 服务
         initDlnaServices()
         registerReceiver(playerStateReceiver, IntentFilter(ACTION_UPDATE_POSITION), RECEIVER_NOT_EXPORTED)
+    }
+
+    private fun getBestDisplayResolution(): Pair<Int, Int> {
+        val display = (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager)
+            .getDisplay(Display.DEFAULT_DISPLAY)
+        val mode = display?.supportedModes
+            ?.maxByOrNull { it.physicalWidth * it.physicalHeight }
+            ?: display?.mode
+
+        val width = mode?.physicalWidth ?: resources.displayMetrics.widthPixels
+        val height = mode?.physicalHeight ?: resources.displayMetrics.heightPixels
+        val longSide = maxOf(width, height).coerceIn(1280, 3840)
+        val shortSide = minOf(width, height).coerceIn(720, 2160)
+        return longSide to shortSide
     }
 
     private fun initWfdServer() {
@@ -230,8 +272,8 @@ class CastReceiverService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Timber.i("CastReceiverService started")
 
-        // 启动 AirPlay 服务器
-        airPlayServer.start(7000)
+        // 启动 AirPlay 2 接收器
+        airPlayReceiver.start()
 
         // 启动 DLNA/UPnP 服务
         upnpHttpServer.start()
@@ -258,8 +300,8 @@ class CastReceiverService : Service() {
             Timber.e(e, "Error unregistering playerStateReceiver")
         }
 
-        // 停止 AirPlay 服务器
-        airPlayServer.stop()
+        // 停止 AirPlay 2 接收器
+        airPlayReceiver.stop()
 
         // 停止 DLNA/UPnP 服务
         ssdpServer.stop()

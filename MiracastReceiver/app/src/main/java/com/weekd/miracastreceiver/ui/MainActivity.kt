@@ -100,12 +100,10 @@ class MainActivity : AppCompatActivity() {
         val deviceName = deviceInfoProvider.getDeviceName()
         val macAddress = NetworkUtils.getMacAddress()
 
-        // 启动 AirPlay 服务广播（用于 iPhone 投屏）
-        mdnsAdvertiser.startAirPlayAdvertising(
-            deviceName = deviceName,
-            macAddress = macAddress,
-            port = 7000
-        )
+        // AirPlay is advertised by CastReceiverService/AirPlayReceiver only.
+        // Do not register a second _airplay._tcp service here: duplicate AirPlay mDNS
+        // records with different TXT capabilities can make iOS connect with the wrong
+        // protocol path and never send the mirroring video SETUP.
 
         // 启动自定义 Miracast 服务广播（用于自定义 Android 发送端）
         mdnsAdvertiser.startAdvertising(

@@ -142,6 +142,10 @@ cd MiracastReceiver
 - **网络**：OkHttp, mDNS/NSD
 - **协议**：AirPlay, DLNA/UPnP, Miracast/WFD, RTSP, RTP
 
+### 🙏 致谢与参考
+
+- AirPlay 屏幕镜像实现借鉴并参考了 [PhairPlay](https://github.com/philippe44/PhairPlay) 项目的协议流程与实现思路。
+
 ### 🐛 已知问题
 
 1. **Windows 无线显示器自动发现**
@@ -293,6 +297,10 @@ Output APKs: `app/build/outputs/apk/`
 - **Video Player**: ExoPlayer (Media3)
 - **Networking**: OkHttp, mDNS/NSD
 - **Protocols**: AirPlay, DLNA/UPnP, Miracast/WFD, RTSP, RTP
+
+### 🙏 Acknowledgements & References
+
+- AirPlay screen mirroring is inspired by and references the protocol flow and implementation ideas from [PhairPlay](https://github.com/philippe44/PhairPlay).
 
 ### 🐛 Known Issues
 

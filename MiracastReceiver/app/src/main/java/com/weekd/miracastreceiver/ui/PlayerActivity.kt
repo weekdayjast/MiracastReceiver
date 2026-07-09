@@ -9,11 +9,14 @@ import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.view.WindowManager
 import android.view.View
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.view.Surface
+import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -26,6 +29,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import com.weekd.miracastreceiver.R
+import com.weekd.miracastreceiver.airplay.StreamStats
 import com.weekd.miracastreceiver.miracast.RtpReceiver
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -69,11 +73,16 @@ class PlayerActivity : AppCompatActivity() {
         const val EXTRA_SPEED = "speed"
         const val EXTRA_QUALITY_URI = "quality_uri"
 
+        @Volatile
+        var airPlayMirrorSurface: Surface? = null
+            private set
+
         private const val IMAGE_SLIDE_INTERVAL_MS = 5_000L
         private const val QUALITY_AUTO = -1
     }
 
     private lateinit var playerView: PlayerView
+    private lateinit var airPlayMirrorSurfaceView: SurfaceView
     private lateinit var imageView: ImageView
     private lateinit var tvStatus: TextView
     private lateinit var tvTitle: TextView
@@ -92,6 +101,7 @@ class PlayerActivity : AppCompatActivity() {
     private var qualityHeight: Int = QUALITY_AUTO
     private var rtpReceiver: RtpReceiver? = null
     private var isMiracastSession = false
+    private var airPlayAspectJob: Job? = null
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -149,6 +159,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun initViews() {
         playerView = findViewById(R.id.player_view)
+        airPlayMirrorSurfaceView = findViewById(R.id.airplay_mirror_surface)
         imageView = findViewById(R.id.image_view)
         tvStatus = findViewById(R.id.tv_status)
         tvTitle = findViewById(R.id.tv_title)
@@ -227,6 +238,11 @@ class PlayerActivity : AppCompatActivity() {
             return
         }
 
+        if (intent?.getBooleanExtra(EXTRA_IS_AIRPLAY_MIRROR, false) == true) {
+            startAirPlayMirrorPlayback()
+            return
+        }
+
         val list = intent?.getStringArrayListExtra(EXTRA_MEDIA_URIS)
             ?: intent?.getStringExtra(EXTRA_MEDIA_URI)?.let { arrayListOf(it) }
             ?: arrayListOf()
@@ -253,6 +269,86 @@ class PlayerActivity : AppCompatActivity() {
         } else {
             playMedia(uri)
         }
+    }
+
+    private fun startAirPlayMirrorPlayback() {
+        Timber.i("Starting AirPlay mirror playback")
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        stopImageSlideShow()
+        player?.clearVideoSurface()
+        player?.pause()
+        playerView.player = null
+        playerView.visibility = View.GONE
+        airPlayMirrorSurfaceView.visibility = View.VISIBLE
+        imageView.visibility = View.GONE
+        tvTitle.text = "iPhone 屏幕镜像"
+        tvStatus.text = "正在接收 iPhone 屏幕..."
+        tvError.visibility = View.GONE
+        updateBufferingState(false)
+        requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+
+        val surfaceView = airPlayMirrorSurfaceView
+
+        fun publishSurface(holder: SurfaceHolder) {
+            val surface = holder.surface
+            airPlayMirrorSurface = surface.takeIf { it.isValid }
+            Timber.i("AirPlay mirror surface ${if (airPlayMirrorSurface == null) "not ready" else "ready"}")
+            if (airPlayMirrorSurface == null) {
+                tvStatus.text = "等待 AirPlay 显示画面..."
+            } else {
+                tvStatus.text = "正在接收 iPhone 屏幕..."
+            }
+        }
+
+        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
+            override fun surfaceCreated(holder: SurfaceHolder) = publishSurface(holder)
+            override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = publishSurface(holder)
+            override fun surfaceDestroyed(holder: SurfaceHolder) {
+                Timber.i("AirPlay mirror surface destroyed")
+                airPlayMirrorSurface = null
+            }
+        })
+        playerView.post { publishSurface(surfaceView.holder) }
+        startAirPlayAspectFitUpdates()
+    }
+
+    private fun startAirPlayAspectFitUpdates() {
+        airPlayAspectJob?.cancel()
+        airPlayAspectJob = lifecycleScope.launch {
+            var lastW = 0
+            var lastH = 0
+            while (isActive) {
+                val videoW = StreamStats.videoWidth
+                val videoH = StreamStats.videoHeight
+                if (videoW > 0 && videoH > 0 && (videoW != lastW || videoH != lastH)) {
+                    lastW = videoW
+                    lastH = videoH
+                    fitAirPlaySurface(videoW, videoH)
+                }
+                delay(300)
+            }
+        }
+    }
+
+    private fun fitAirPlaySurface(videoW: Int, videoH: Int) {
+        val parent = airPlayMirrorSurfaceView.parent as? View ?: return
+        val parentW = parent.width
+        val parentH = parent.height
+        if (parentW <= 0 || parentH <= 0) return
+
+        val videoAspect = videoW.toFloat() / videoH.toFloat()
+        val parentAspect = parentW.toFloat() / parentH.toFloat()
+        val (targetW, targetH) = if (videoAspect > parentAspect) {
+            parentW to (parentW / videoAspect).toInt()
+        } else {
+            (parentH * videoAspect).toInt() to parentH
+        }
+
+        airPlayMirrorSurfaceView.layoutParams = airPlayMirrorSurfaceView.layoutParams.apply {
+            width = targetW.coerceAtLeast(1)
+            height = targetH.coerceAtLeast(1)
+        }
+        Timber.i("AirPlay mirror aspect-fit: video=${videoW}x$videoH view=${targetW}x$targetH parent=${parentW}x$parentH")
     }
 
     private fun startMiracastPlayback(rtpPort: Int, sessionId: String?) {
@@ -515,6 +611,9 @@ class PlayerActivity : AppCompatActivity() {
     private fun stopPlayback() {
         stopImageSlideShow()
         stopProgressUpdates()
+        airPlayAspectJob?.cancel()
+        airPlayAspectJob = null
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         player?.stop()
     }
 
@@ -556,8 +655,12 @@ class PlayerActivity : AppCompatActivity() {
             Timber.e(e, "Error unregistering receiver")
         }
         stopImageSlideShow()
+        airPlayAspectJob?.cancel()
+        airPlayAspectJob = null
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         rtpReceiver?.stop()
         rtpReceiver = null
+        airPlayMirrorSurface = null
         player?.release()
         player = null
         Timber.i("PlayerActivity destroyed")
