@@ -30,9 +30,9 @@
 ### ✨ 功能特性
 
 - **🍎 AirPlay 支持**：完美支持 iPhone、iPad、Mac 投屏
+  - 屏幕镜像（FairPlay 解密 + H.264 硬解码）
   - 视频投屏
   - 音频流播放
-  - 屏幕镜像
 
 - **📺 DLNA/UPnP 支持**：兼容各平台 DLNA 客户端
   - Bilibili、优酷、爱奇艺等视频 App
@@ -57,7 +57,7 @@
 
 | 平台 | 协议 | 状态 | 说明 |
 |------|------|------|------|
-| iPhone/iPad | AirPlay | ✅ 完美支持 | 视频、音频投屏 |
+| iPhone/iPad | AirPlay | ✅ 完美支持 | 屏幕镜像、视频、音频投屏 |
 | Android 手机 | DLNA | ✅ 完美支持 | Bilibili、优酷等 App |
 | Windows | DLNA | ✅ 完美支持 | 媒体播放器投屏 |
 | Windows | Miracast | ⚠️ 受限支持 | 需手动 Wi-Fi Direct 配对 |
@@ -128,8 +128,6 @@ cd MiracastReceiver
 ### 📖 文档
 
 - [开发与调试指南](开发与调试指南.md) - 完整的开发、打包、安装和调试说明
-- [AirPlay 支持说明](AirPlay连接问题诊断.md) - AirPlay 协议实现和问题排查
-- [iOS 屏幕镜像](iOS屏幕镜像支持说明.md) - iOS 设备投屏详细说明
 - [Windows 无线显示器](Windows无线显示器支持说明.md) - Miracast 协议说明和限制
 
 ### 🔧 技术栈
@@ -159,9 +157,8 @@ cd MiracastReceiver
 ### 🗺️ 后续计划
 
 - **完善 AirPlay 支持**
-  - 优化 iPhone/iPad/Mac 视频投屏稳定性
-  - 完善 AirPlay 音频流播放
-  - 持续改进 iOS 屏幕镜像能力
+  - 优化屏幕镜像稳定性和延迟
+  - 优化音视频同步
 
 - **开发 Windows 无线投屏**
   - 深入适配 Miracast / Wi-Fi Display 协议
@@ -183,9 +180,9 @@ cd MiracastReceiver
 ### ✨ Features
 
 - **🍎 AirPlay Support**: Perfect compatibility with iPhone, iPad, and Mac
+  - Screen mirroring (FairPlay decryption + H.264 hardware decoding)
   - Video casting
   - Audio streaming
-  - Screen mirroring
 
 - **📺 DLNA/UPnP Support**: Compatible with DLNA clients across platforms
   - Bilibili, Youku, iQiyi video apps
@@ -210,7 +207,7 @@ cd MiracastReceiver
 
 | Platform | Protocol | Status | Notes |
 |----------|----------|--------|-------|
-| iPhone/iPad | AirPlay | ✅ Perfect | Video, audio casting |
+| iPhone/iPad | AirPlay | ✅ Perfect | Screen mirroring, video, audio casting |
 | Android | DLNA | ✅ Perfect | Bilibili, Youku apps |
 | Windows | DLNA | ✅ Perfect | Media player casting |
 | Windows | Miracast | ⚠️ Limited | Manual Wi-Fi Direct pairing required |
@@ -281,8 +278,6 @@ Output APKs: `app/build/outputs/apk/`
 ### 📖 Documentation
 
 - [Development Guide](开发与调试指南.md) - Complete development, packaging, installation, and debugging instructions (Chinese)
-- [AirPlay Support](AirPlay连接问题诊断.md) - AirPlay protocol implementation and troubleshooting (Chinese)
-- [iOS Screen Mirroring](iOS屏幕镜像支持说明.md) - Detailed iOS device casting instructions (Chinese)
 - [Windows Wireless Display](Windows无线显示器支持说明.md) - Miracast protocol explanation and limitations (Chinese)
 
 ### 🔧 Tech Stack
@@ -312,9 +307,8 @@ Output APKs: `app/build/outputs/apk/`
 ### 🗺️ Roadmap
 
 - **Enhance AirPlay Support**
-  - Optimize iPhone/iPad/Mac video casting stability
-  - Improve AirPlay audio streaming
-  - Continuously enhance iOS screen mirroring capabilities
+  - Optimize screen mirroring stability and latency
+  - Improve audio-video synchronization
 
 - **Develop Windows Wireless Display**
   - Deep adaptation of Miracast / Wi-Fi Display protocol
