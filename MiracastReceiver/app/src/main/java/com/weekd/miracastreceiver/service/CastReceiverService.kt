@@ -36,6 +36,7 @@ class CastReceiverService : Service() {
         private const val CHANNEL_ID = "cast_receiver_service"
         private const val CHANNEL_NAME = "投屏接收服务"
         private const val ACTION_UPDATE_POSITION = "com.weekd.miracastreceiver.ACTION_UPDATE_POSITION"
+        private const val ACTION_PLAYBACK_STOPPED = "com.weekd.miracastreceiver.ACTION_PLAYBACK_STOPPED"
     }
 
     private lateinit var airPlayReceiver: AirPlayReceiver
@@ -49,13 +50,22 @@ class CastReceiverService : Service() {
 
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_UPDATE_POSITION) {
-                val position = intent.getLongExtra("position", 0L)
-                val duration = intent.getLongExtra("duration", 0L)
-                val isPlaying = intent.getBooleanExtra("is_playing", false)
-                dlnaRenderer.updatePosition(position, duration)
-                if (isPlaying) dlnaRenderer.setPlaying() else dlnaRenderer.setPaused()
-                Timber.d("Player position updated: $position / $duration")
+            when (intent?.action) {
+                ACTION_UPDATE_POSITION -> {
+                    val position = intent.getLongExtra("position", 0L)
+                    val duration = intent.getLongExtra("duration", 0L)
+                    val isPlaying = intent.getBooleanExtra("is_playing", false)
+                    dlnaRenderer.updatePosition(position, duration)
+                    if (isPlaying) dlnaRenderer.setPlaying() else dlnaRenderer.setPaused()
+                    Timber.d("Player position updated: $position / $duration")
+                }
+                ACTION_PLAYBACK_STOPPED -> {
+                    // TV 端本地退出/播放结束，需要让 DLNA 状态归零，
+                    // 否则 Emby 会一直显示"正在播放"且无法取消/切换投屏。
+                    dlnaRenderer.updatePosition(0L, 0L)
+                    dlnaRenderer.setStopped()
+                    Timber.i("Playback stopped locally, DLNA renderer reset to STOPPED")
+                }
             }
         }
     }
@@ -103,7 +113,11 @@ class CastReceiverService : Service() {
 
         // 初始化 DLNA/UPnP 服务
         initDlnaServices()
-        registerReceiver(playerStateReceiver, IntentFilter(ACTION_UPDATE_POSITION), RECEIVER_NOT_EXPORTED)
+        val playerStateFilter = IntentFilter().apply {
+            addAction(ACTION_UPDATE_POSITION)
+            addAction(ACTION_PLAYBACK_STOPPED)
+        }
+        registerReceiver(playerStateReceiver, playerStateFilter, RECEIVER_NOT_EXPORTED)
     }
 
     private fun getBestDisplayResolution(): Pair<Int, Int> {

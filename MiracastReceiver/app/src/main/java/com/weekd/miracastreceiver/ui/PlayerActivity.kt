@@ -9,6 +9,8 @@ import android.content.res.Configuration
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
+import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.view.View
 import android.widget.ImageView
@@ -79,6 +81,13 @@ class PlayerActivity : AppCompatActivity() {
 
         private const val IMAGE_SLIDE_INTERVAL_MS = 5_000L
         private const val QUALITY_AUTO = -1
+
+        // Kodi 风格连续快进快退：短时间内连续按键会加大跳转步长
+        private const val SEEK_ACCEL_WINDOW_MS = 1_500L
+        private const val SEEK_COMMIT_DELAY_MS = 500L
+        private val SEEK_STEP_TABLE_MS = longArrayOf(10_000L, 30_000L, 60_000L, 120_000L, 300_000L)
+
+        private const val ACTION_PLAYBACK_STOPPED = "com.weekd.miracastreceiver.ACTION_PLAYBACK_STOPPED"
     }
 
     private lateinit var playerView: PlayerView
@@ -102,6 +111,15 @@ class PlayerActivity : AppCompatActivity() {
     private var rtpReceiver: RtpReceiver? = null
     private var isMiracastSession = false
     private var airPlayAspectJob: Job? = null
+
+    // Kodi 风格连续快进快退状态
+    private var pendingSeekDeltaMs = 0L
+    private var seekAccelerationStep = 0
+    private var lastSeekWasForward = true
+    private var lastSeekPressAt = 0L
+    private var seekCommitJob: Job? = null
+    private var isControllerVisible = false
+    private var isDialogShowing = false
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -217,6 +235,7 @@ class PlayerActivity : AppCompatActivity() {
         playerView.player = player
         playerView.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { visibility ->
             findViewById<View?>(R.id.status_bar)?.visibility = visibility
+            isControllerVisible = visibility == View.VISIBLE
         })
         playerView.setShowNextButton(true)
         playerView.setShowPreviousButton(true)
@@ -230,6 +249,91 @@ class PlayerActivity : AppCompatActivity() {
         playerView.findViewById<View?>(R.id.btn_subtitle)?.setOnClickListener {
             Toast.makeText(this, "字幕切换将随媒体字幕轨自动支持", Toast.LENGTH_SHORT).show()
         }
+        playerView.findViewById<View?>(R.id.exo_ffwd)?.setOnClickListener { handleSeekPress(forward = true) }
+        playerView.findViewById<View?>(R.id.exo_rew)?.setOnClickListener { handleSeekPress(forward = false) }
+    }
+
+    /**
+     * 参考 Kodi 的连续快进快退：短时间内连续按键会累加跳转步长并放大跨度，
+     * 松开按键一段时间后再统一提交一次 seek，避免频繁 seek 造成反复缓冲。
+     */
+    private fun handleSeekPress(forward: Boolean) {
+        if (isCurrentImage() || player == null) return
+        val now = SystemClock.elapsedRealtime()
+        val withinAccelWindow = now - lastSeekPressAt <= SEEK_ACCEL_WINDOW_MS
+        seekAccelerationStep = if (withinAccelWindow && forward == lastSeekWasForward) {
+            (seekAccelerationStep + 1).coerceAtMost(SEEK_STEP_TABLE_MS.lastIndex)
+        } else {
+            pendingSeekDeltaMs = 0L
+            0
+        }
+        lastSeekWasForward = forward
+        lastSeekPressAt = now
+
+        val step = SEEK_STEP_TABLE_MS[seekAccelerationStep]
+        pendingSeekDeltaMs += if (forward) step else -step
+
+        previewPendingSeek()
+
+        seekCommitJob?.cancel()
+        seekCommitJob = lifecycleScope.launch {
+            delay(SEEK_COMMIT_DELAY_MS)
+            commitPendingSeek()
+        }
+    }
+
+    private fun previewPendingSeek() {
+        val currentPlayer = player ?: return
+        val duration = currentPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        val target = (currentPlayer.currentPosition + pendingSeekDeltaMs).coerceIn(0L, duration)
+        val sign = if (pendingSeekDeltaMs >= 0) "+" else "-"
+        val deltaSeconds = kotlin.math.abs(pendingSeekDeltaMs) / 1000
+        tvStatus.text = "${sign}${deltaSeconds}s  ${formatTimeMs(target)}"
+        playerView.showController()
+    }
+
+    private fun commitPendingSeek() {
+        val currentPlayer = player ?: return
+        if (pendingSeekDeltaMs == 0L) return
+        val duration = currentPlayer.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+        val target = (currentPlayer.currentPosition + pendingSeekDeltaMs).coerceIn(0L, duration)
+        currentPlayer.seekTo(target)
+        pendingSeekDeltaMs = 0L
+        seekAccelerationStep = 0
+        reportPlaybackPosition()
+    }
+
+    private fun formatTimeMs(ms: Long): String {
+        val totalSeconds = ms / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format("%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format("%d:%02d", minutes, seconds)
+        }
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (event.action == KeyEvent.ACTION_DOWN && !isCurrentImage() && !isDialogShowing) {
+            val isForwardKey = event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ||
+                event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+            val isRewindKey = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
+                event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND
+            if (isForwardKey || isRewindKey) {
+                val isHardwareSeekKey = event.keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ||
+                    event.keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+                val inSeekMode = SystemClock.elapsedRealtime() - lastSeekPressAt <= SEEK_ACCEL_WINDOW_MS
+                // 方向键仅在 OSD 未显示或正处于连续快进快退中时才拦截用于 seek，
+                // 否则放行给控制条做按钮焦点导航（与 Kodi 行为一致）。
+                if (isHardwareSeekKey || inSeekMode || !isControllerVisible) {
+                    handleSeekPress(forward = isForwardKey)
+                    return true
+                }
+            }
+        }
+        return super.dispatchKeyEvent(event)
     }
 
     private fun handleIntent(intent: Intent?) {
@@ -503,6 +607,7 @@ class PlayerActivity : AppCompatActivity() {
             playCurrent()
         } else {
             updateBufferingState(false)
+            reportPlaybackStopped()
         }
     }
 
@@ -524,6 +629,7 @@ class PlayerActivity : AppCompatActivity() {
         val labels = arrayOf("自动", "流畅 480p", "高清 720p", "超清 1080p", "原画")
         val heights = intArrayOf(QUALITY_AUTO, 480, 720, 1080, Int.MAX_VALUE)
         val checked = heights.indexOf(qualityHeight).takeIf { it >= 0 } ?: 0
+        isDialogShowing = true
         AlertDialog.Builder(this)
             .setTitle("选择画质")
             .setSingleChoiceItems(labels, checked) { dialog, which ->
@@ -531,6 +637,7 @@ class PlayerActivity : AppCompatActivity() {
                 applyQuality(qualityHeight)
                 dialog.dismiss()
             }
+            .setOnDismissListener { isDialogShowing = false }
             .show()
     }
 
@@ -548,12 +655,14 @@ class PlayerActivity : AppCompatActivity() {
     private fun showSpeedDialog(speedView: TextView) {
         val labels = arrayOf("0.5x", "0.75x", "1.0x", "1.25x", "1.5x", "2.0x")
         val speeds = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
+        isDialogShowing = true
         AlertDialog.Builder(this)
             .setTitle("播放速度")
             .setItems(labels) { _, which ->
                 player?.setPlaybackSpeed(speeds[which])
                 speedView.text = labels[which]
             }
+            .setOnDismissListener { isDialogShowing = false }
             .show()
     }
 
@@ -615,6 +724,7 @@ class PlayerActivity : AppCompatActivity() {
         airPlayAspectJob = null
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         player?.stop()
+        reportPlaybackStopped()
     }
 
     private fun startProgressUpdates() {
@@ -647,6 +757,17 @@ class PlayerActivity : AppCompatActivity() {
         sendBroadcast(intent)
     }
 
+    /**
+     * TV 端本地退出/播放结束时通知 DLNA 渲染器状态归零，
+     * 否则 Emby 会一直认为该设备处于播放中，无法取消投屏或切换到新文件。
+     */
+    private fun reportPlaybackStopped() {
+        val intent = Intent(ACTION_PLAYBACK_STOPPED).apply {
+            setPackage(packageName)
+        }
+        sendBroadcast(intent)
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         try {
@@ -663,6 +784,7 @@ class PlayerActivity : AppCompatActivity() {
         airPlayMirrorSurface = null
         player?.release()
         player = null
+        reportPlaybackStopped()
         Timber.i("PlayerActivity destroyed")
     }
 
