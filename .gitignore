@@ -106,3 +106,6 @@ setup-android-env.bat
 
 # Sender app (separate project)
 AndroidSender/
+miracast-receiver-release.jks
+key
+apksigner

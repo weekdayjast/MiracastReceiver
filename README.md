@@ -32,7 +32,7 @@
 - **🍎 AirPlay 支持**：完美支持 iPhone、iPad、Mac 投屏
   - 视频投屏
   - 音频流播放
-  - 屏幕镜像（开发中）
+  - 屏幕镜像
 
 - **📺 DLNA/UPnP 支持**：兼容各平台 DLNA 客户端
   - Bilibili、优酷、爱奇艺等视频 App
@@ -153,10 +153,7 @@ cd MiracastReceiver
    - Windows "Win+K" 无法自动发现设备
    - 需要通过手动 Wi-Fi Direct 配对或使用 DLNA 投屏
 
-2. **AirPlay 屏幕镜像**
-   - 基础实现已完成，但需进一步优化
-
-3. **Emby 投屏兼容性**
+2. **Emby 投屏兼容性**
    - 部分 Emby 客户端的 SOAP 请求格式可能需要特殊处理
 
 ### 🗺️ 后续计划
@@ -188,7 +185,7 @@ cd MiracastReceiver
 - **🍎 AirPlay Support**: Perfect compatibility with iPhone, iPad, and Mac
   - Video casting
   - Audio streaming
-  - Screen mirroring (in development)
+  - Screen mirroring
 
 - **📺 DLNA/UPnP Support**: Compatible with DLNA clients across platforms
   - Bilibili, Youku, iQiyi video apps
@@ -309,10 +306,7 @@ Output APKs: `app/build/outputs/apk/`
    - Windows "Win+K" cannot auto-discover the device
    - Use manual Wi-Fi Direct pairing or DLNA casting
 
-2. **AirPlay Screen Mirroring**
-   - Basic implementation complete, needs optimization
-
-3. **Emby Casting Compatibility**
+2. **Emby Casting Compatibility**
    - Some Emby clients may require special SOAP format handling
 
 ### 🗺️ Roadmap
