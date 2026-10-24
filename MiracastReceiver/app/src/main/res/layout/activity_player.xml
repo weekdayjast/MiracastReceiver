@@ -33,7 +33,7 @@
         android:layout_height="match_parent"
         android:adjustViewBounds="true"
         android:background="#000000"
-        android:contentDescription="投屏图片"
+        android:contentDescription="@string/cd_cast_image"
         android:scaleType="fitCenter"
         android:visibility="gone" />
 

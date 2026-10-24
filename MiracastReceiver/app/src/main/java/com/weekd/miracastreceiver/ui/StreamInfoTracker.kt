@@ -90,12 +90,19 @@ class StreamInfoTracker {
         }
 
         /**
-         * 把标签补齐到固定列宽，让等宽字体下各行数值对齐。
-         * 中日韩字符按 2 列宽计算（等宽字体里一个汉字正好占两个字符位）。
+         * 标签在等宽字体下占的列数：中日韩字符按 2 列（一个汉字正好占两个字符位），
+         * 泰文等语言里叠在前一个字符上的附加符号不占列。
          */
-        fun padLabel(label: String, columns: Int = 12): String {
-            val width = label.fold(0) { acc, c -> acc + if (c.code >= 0x2E80) 2 else 1 }
-            return label + " ".repeat((columns - width).coerceAtLeast(1))
+        fun labelWidth(label: String): Int = label.sumOf { c ->
+            when {
+                Character.getType(c) == Character.NON_SPACING_MARK.toInt() -> 0
+                c.code >= 0x2E80 -> 2
+                else -> 1
+            }.toInt()
         }
+
+        /** 把标签补齐到固定列宽，让等宽字体下各行数值对齐。 */
+        fun padLabel(label: String, columns: Int = 12): String =
+            label + " ".repeat((columns - labelWidth(label)).coerceAtLeast(1))
     }
 }

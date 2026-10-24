@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">Ожидание подключения трансляции…</string>
+    <string name="device_ip">IP устройства: %s</string>
+    <string name="device_ip_fetching">Определение…</string>
+    <string name="connection_code_label">Код подключения</string>
+    <string name="how_to_connect">Как подключиться</string>
+    <string name="connect_instruction">1. Убедитесь, что передающее устройство и телевизор находятся в одной локальной сети\n2. Откройте приложение для трансляции на передающем устройстве\n3. Найдите и выберите это устройство\n4. Начните трансляцию</string>
+    <string name="auto_start_on_boot">Запускать приёмник при включении</string>
+    <string name="auto_start_on_boot_hint">После включения телевизора работает в фоне, открывать приложение не нужно. На некоторых телевизорах нужно разрешить автозапуск этого приложения в системных настройках.</string>
+    <string name="language">Язык</string>
+    <string name="language_follow_system">Как в системе</string>
+    <string name="status_no_network">Нет подключения к сети</string>
+    <string name="status_no_wifi">Нет подключения к Wi-Fi</string>
+    <string name="status_service_starting">Запуск службы…</string>
+    <string name="status_permission_denied">Разрешение на доступ к местоположению не предоставлено, беспроводная трансляция с Windows недоступна</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">Требуется разрешение «Поверх других приложений»</string>
+    <string name="overlay_permission_message">Когда приложение не открыто (например, после автозапуска при включении или возврата на главный экран), система не даёт экрану трансляции появиться, и кажется, что трансляция не работает.\n\nВключите это разрешение для приложения на следующей странице настроек.</string>
+    <string name="overlay_permission_open">Открыть настройки</string>
+    <string name="overlay_permission_later">Позже</string>
+    <string name="overlay_settings_missing">На этом устройстве нет такой страницы настроек. Выполните через adb: appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">Запрос на трансляцию</string>
+    <string name="allow">Разрешить</string>
+    <string name="deny">Отклонить</string>
+    <string name="remember_device">Запомнить это устройство</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">Подключено</string>
+    <string name="playing">Воспроизведение</string>
+    <string name="status_paused">Пауза</string>
+    <string name="status_buffering">Буферизация…</string>
+    <string name="status_finished">Воспроизведение завершено</string>
+    <string name="status_playback_error">Ошибка воспроизведения</string>
+    <string name="error_playback_detail">Ошибка воспроизведения: %s</string>
+    <string name="error_unknown">Неизвестная ошибка</string>
+    <string name="status_speed">Скорость воспроизведения: %s</string>
+    <string name="status_quality">Качество: %s</string>
+    <string name="title_dlna">Трансляция DLNA</string>
+    <string name="title_dlna_indexed">Трансляция DLNA %1$d/%2$d</string>
+    <string name="title_iphone_mirror">Повтор экрана iPhone</string>
+    <string name="title_windows_display">Беспроводной дисплей Windows</string>
+    <string name="status_waiting_airplay">Ожидание изображения AirPlay…</string>
+    <string name="status_waiting_windows">Ожидание изображения Windows…</string>
+    <string name="status_receiving_iphone">Приём экрана iPhone…</string>
+    <string name="status_receiving_windows">Приём экрана Windows…</string>
+    <string name="status_showing_image">Показ изображения</string>
+    <string name="status_image_error">Ошибка загрузки изображения</string>
+    <string name="error_image_detail">Ошибка загрузки изображения: %s</string>
+    <string name="error_image_decode">Не удалось загрузить изображение</string>
+    <string name="status_slideshow_paused">Слайд-шоу приостановлено</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">Ещё</string>
+    <string name="menu_stream_info">Сведения о видео</string>
+    <string name="menu_stream_info_hide">Скрыть сведения о видео</string>
+    <string name="menu_quality">Качество</string>
+    <string name="menu_speed">Скорость воспроизведения (%s)</string>
+    <string name="menu_subtitles">Субтитры</string>
+    <string name="menu_orientation">Ориентация экрана</string>
+    <string name="subtitles_auto">Субтитры переключаются автоматически по дорожкам субтитров медиафайла</string>
+    <string name="quality_title">Выбор качества</string>
+    <string name="quality_auto">Авто</string>
+    <string name="quality_480">Стандарт 480p</string>
+    <string name="quality_720">HD 720p</string>
+    <string name="quality_1080">Full HD 1080p</string>
+    <string name="quality_original">Оригинал</string>
+    <string name="speed_title">Скорость воспроизведения</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">Сведения о видео</string>
+    <string name="info_source_resolution">Исходное разрешение</string>
+    <string name="info_display_resolution">Разрешение показа</string>
+    <string name="info_codec">Видеокодек</string>
+    <string name="info_frame_rate">Частота кадров</string>
+    <string name="info_bitrate">Битрейт</string>
+    <string name="info_network_speed">Скорость сети</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">Транслируемое изображение</string>
+    <string name="cd_previous">Предыдущий</string>
+    <string name="cd_rewind">Перемотка назад</string>
+    <string name="cd_play_pause">Воспроизведение/пауза</string>
+    <string name="cd_fast_forward">Перемотка вперёд</string>
+    <string name="cd_next">Следующий</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">Служба приёма трансляций</string>
+    <string name="notification_channel_description">Поддерживает работу службы приёма трансляций</string>
+    <string name="notification_waiting">Ожидание подключений AirPlay / DLNA / Miracast</string>
+</resources>

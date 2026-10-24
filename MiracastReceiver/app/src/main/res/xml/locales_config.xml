@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 13+ 系统设置「应用语言」里列出的语言，要和 AppLanguage.OPTIONS 保持一致 -->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="zh-CN" />
+    <locale android:name="zh-TW" />
+    <locale android:name="ja" />
+    <locale android:name="ko" />
+    <locale android:name="ru" />
+    <locale android:name="fr" />
+    <locale android:name="es" />
+    <locale android:name="th" />
+    <locale android:name="hi" />
+</locale-config>

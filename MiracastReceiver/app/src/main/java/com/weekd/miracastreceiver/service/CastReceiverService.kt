@@ -27,6 +27,7 @@ import com.weekd.miracastreceiver.dlna.UpnpHttpServer
 import com.weekd.miracastreceiver.miracast.WfdRootHelper
 import com.weekd.miracastreceiver.miracast.WfdServer
 import com.weekd.miracastreceiver.miracast.WifiDirectManager
+import com.weekd.miracastreceiver.util.AppLanguage
 import com.weekd.miracastreceiver.utils.NetworkUtils
 import timber.log.Timber
 import java.util.UUID
@@ -43,7 +44,6 @@ class CastReceiverService : Service() {
 
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "cast_receiver_service"
-        private const val CHANNEL_NAME = "投屏接收服务"
         private const val ACTION_UPDATE_POSITION = "com.weekd.miracastreceiver.ACTION_UPDATE_POSITION"
         private const val ACTION_PLAYBACK_STOPPED = "com.weekd.miracastreceiver.ACTION_PLAYBACK_STOPPED"
 
@@ -91,6 +91,11 @@ class CastReceiverService : Service() {
         }
     }
 
+    /** 通知、DLNA 默认标题等文案跟随应用内选择的语言 */
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(AppLanguage.wrap(newBase))
+    }
+
     override fun onCreate() {
         super.onCreate()
         Timber.i("CastReceiverService created")
@@ -127,7 +132,7 @@ class CastReceiverService : Service() {
                 if (state == com.weekd.miracastreceiver.airplay.AirPlayState.CONNECTED && !airPlayPlayerStarted) {
                     airPlayPlayerStarted = true
                     val intent = Intent(this, com.weekd.miracastreceiver.ui.PlayerActivity::class.java).apply {
-                        putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_TITLE, "iPhone 屏幕镜像")
+                        putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_TITLE, getString(R.string.title_iphone_mirror))
                         putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_IS_AIRPLAY_MIRROR, true)
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     }
@@ -339,7 +344,7 @@ class CastReceiverService : Service() {
         // 简单解析 DIDL-Lite metadata 中的 title
         val titlePattern = Regex("<dc:title>(.*?)</dc:title>", RegexOption.IGNORE_CASE)
         val match = titlePattern.find(metadata)
-        return match?.groupValues?.getOrNull(1) ?: "DLNA 投屏"
+        return match?.groupValues?.getOrNull(1) ?: getString(R.string.title_dlna)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -493,10 +498,11 @@ class CastReceiverService : Service() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                CHANNEL_NAME,
+                // 渠道已存在时再次创建只会更新名称和描述，切换系统语言后重启服务即可跟着变
+                getString(R.string.notification_channel_name),
                 NotificationManager.IMPORTANCE_LOW
             ).apply {
-                description = "保持投屏接收服务运行"
+                description = getString(R.string.notification_channel_description)
                 setShowBadge(false)
             }
 
@@ -508,7 +514,7 @@ class CastReceiverService : Service() {
     private fun createNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
-            .setContentText("正在等待 AirPlay/DLNA/Miracast 投屏连接")
+            .setContentText(getString(R.string.notification_waiting))
             .setSmallIcon(R.drawable.ic_stat_miracast)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)

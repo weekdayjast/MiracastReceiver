@@ -80,7 +80,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="连接码"
+                android:text="@string/connection_code_label"
                 android:textColor="@color/text_secondary"
                 android:textSize="14sp" />
 
@@ -142,6 +142,36 @@
                 android:text="@string/auto_start_on_boot_hint"
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
+        </LinearLayout>
+
+        <!-- 设置：界面语言 -->
+        <LinearLayout
+            android:id="@+id/setting_language"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_setting_item"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:padding="14dp">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/language"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
+
+            <TextView
+                android:id="@+id/tv_language_value"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textColor="@color/accent"
+                android:textSize="16sp"
+                tools:text="English" />
         </LinearLayout>
 
         <!-- 连接说明 -->

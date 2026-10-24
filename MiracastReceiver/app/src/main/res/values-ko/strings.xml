@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">캐스트 연결 대기 중…</string>
+    <string name="device_ip">기기 IP: %s</string>
+    <string name="device_ip_fetching">확인 중…</string>
+    <string name="connection_code_label">연결 코드</string>
+    <string name="how_to_connect">연결 방법</string>
+    <string name="connect_instruction">1. 보내는 기기와 TV가 같은 로컬 네트워크에 있는지 확인\n2. 보내는 기기에서 캐스트 앱 열기\n3. 이 기기를 검색하여 선택\n4. 캐스트 시작</string>
+    <string name="auto_start_on_boot">부팅 시 수신 서비스 자동 시작</string>
+    <string name="auto_start_on_boot_hint">TV를 켜면 백그라운드에서 자동으로 실행되며 앱을 직접 열 필요가 없습니다. 일부 TV에서는 시스템 설정에서 이 앱의 자동 시작을 허용해야 합니다.</string>
+    <string name="language">언어</string>
+    <string name="language_follow_system">시스템 설정 따르기</string>
+    <string name="status_no_network">네트워크에 연결되지 않음</string>
+    <string name="status_no_wifi">Wi-Fi에 연결되지 않음</string>
+    <string name="status_service_starting">서비스 시작 중…</string>
+    <string name="status_permission_denied">위치 권한이 허용되지 않아 Windows 무선 디스플레이를 사용할 수 없습니다</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">\'다른 앱 위에 표시\' 권한이 필요합니다</string>
+    <string name="overlay_permission_message">이 앱이 열려 있지 않을 때(예: 부팅 후 자동 시작되었거나 홈 화면으로 돌아간 경우) 시스템이 캐스트 화면 표시를 차단하여 캐스트해도 반응이 없는 것처럼 보입니다.\n\n다음 설정 화면에서 이 앱의 권한을 켜 주세요.</string>
+    <string name="overlay_permission_open">설정 열기</string>
+    <string name="overlay_permission_later">나중에</string>
+    <string name="overlay_settings_missing">이 기기에는 해당 설정 화면이 없습니다. adb로 실행하세요: appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">캐스트 연결 요청</string>
+    <string name="allow">허용</string>
+    <string name="deny">거부</string>
+    <string name="remember_device">이 기기 기억하기</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">연결됨</string>
+    <string name="playing">재생 중</string>
+    <string name="status_paused">일시정지됨</string>
+    <string name="status_buffering">버퍼링 중…</string>
+    <string name="status_finished">재생 완료</string>
+    <string name="status_playback_error">재생 오류</string>
+    <string name="error_playback_detail">재생 오류: %s</string>
+    <string name="error_unknown">알 수 없는 오류</string>
+    <string name="status_speed">재생 속도: %s</string>
+    <string name="status_quality">화질: %s</string>
+    <string name="title_dlna">DLNA 캐스트</string>
+    <string name="title_dlna_indexed">DLNA 캐스트 %1$d/%2$d</string>
+    <string name="title_iphone_mirror">iPhone 화면 미러링</string>
+    <string name="title_windows_display">Windows 무선 디스플레이</string>
+    <string name="status_waiting_airplay">AirPlay 화면 대기 중…</string>
+    <string name="status_waiting_windows">Windows 화면 대기 중…</string>
+    <string name="status_receiving_iphone">iPhone 화면 수신 중…</string>
+    <string name="status_receiving_windows">Windows 화면 수신 중…</string>
+    <string name="status_showing_image">이미지 표시 중</string>
+    <string name="status_image_error">이미지 로드 오류</string>
+    <string name="error_image_detail">이미지 로드 오류: %s</string>
+    <string name="error_image_decode">이미지를 불러올 수 없습니다</string>
+    <string name="status_slideshow_paused">슬라이드쇼 일시정지됨</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">더보기</string>
+    <string name="menu_stream_info">동영상 정보</string>
+    <string name="menu_stream_info_hide">동영상 정보 닫기</string>
+    <string name="menu_quality">화질</string>
+    <string name="menu_speed">재생 속도(%s)</string>
+    <string name="menu_subtitles">자막</string>
+    <string name="menu_orientation">화면 방향</string>
+    <string name="subtitles_auto">자막은 미디어의 자막 트랙에 따라 자동으로 전환됩니다</string>
+    <string name="quality_title">화질 선택</string>
+    <string name="quality_auto">자동</string>
+    <string name="quality_480">일반 480p</string>
+    <string name="quality_720">HD 720p</string>
+    <string name="quality_1080">풀 HD 1080p</string>
+    <string name="quality_original">원본</string>
+    <string name="speed_title">재생 속도</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">동영상 정보</string>
+    <string name="info_source_resolution">원본 해상도</string>
+    <string name="info_display_resolution">표시 해상도</string>
+    <string name="info_codec">비디오 코덱</string>
+    <string name="info_frame_rate">프레임 속도</string>
+    <string name="info_bitrate">비트레이트</string>
+    <string name="info_network_speed">네트워크 속도</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">캐스트 이미지</string>
+    <string name="cd_previous">이전</string>
+    <string name="cd_rewind">되감기</string>
+    <string name="cd_play_pause">재생/일시정지</string>
+    <string name="cd_fast_forward">빨리 감기</string>
+    <string name="cd_next">다음</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">캐스트 수신 서비스</string>
+    <string name="notification_channel_description">캐스트 수신 서비스를 계속 실행합니다</string>
+    <string name="notification_waiting">AirPlay / DLNA / Miracast 연결 대기 중</string>
+</resources>

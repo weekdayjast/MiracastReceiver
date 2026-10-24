@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">等待投屏连接...</string>
+    <string name="device_ip">设备 IP: %s</string>
+    <string name="device_ip_fetching">获取中...</string>
+    <string name="connection_code_label">连接码</string>
+    <string name="how_to_connect">如何连接</string>
+    <string name="connect_instruction">1. 确保发送设备与电视在同一局域网\n2. 打开发送端应用\n3. 扫描并选择此设备\n4. 开始投屏</string>
+    <string name="auto_start_on_boot">开机自动启动接收服务</string>
+    <string name="auto_start_on_boot_hint">电视开机后在后台自动运行，无需手动打开本应用。部分电视需要在系统设置里允许本应用自启动。</string>
+    <string name="language">语言</string>
+    <string name="language_follow_system">跟随系统</string>
+    <string name="status_no_network">网络未连接</string>
+    <string name="status_no_wifi">未连接到 Wi-Fi</string>
+    <string name="status_service_starting">服务启动中...</string>
+    <string name="status_permission_denied">未授予定位权限，Windows 无线投屏不可用</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">需要「显示在其他应用上层」权限</string>
+    <string name="overlay_permission_message">未打开本应用时（例如开机自启后、或退回桌面后），系统会阻止投屏画面自动弹出，表现为投屏没有反应。\n\n请在接下来的设置页中为本应用开启此权限。</string>
+    <string name="overlay_permission_open">去设置</string>
+    <string name="overlay_permission_later">稍后</string>
+    <string name="overlay_settings_missing">此设备没有该设置页，请用 adb 执行：appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">投屏连接请求</string>
+    <string name="allow">允许</string>
+    <string name="deny">拒绝</string>
+    <string name="remember_device">记住此设备</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">已连接</string>
+    <string name="playing">正在播放</string>
+    <string name="status_paused">已暂停</string>
+    <string name="status_buffering">正在缓冲...</string>
+    <string name="status_finished">播放完成</string>
+    <string name="status_playback_error">播放错误</string>
+    <string name="error_playback_detail">播放错误: %s</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="status_speed">播放速度：%s</string>
+    <string name="status_quality">画质：%s</string>
+    <string name="title_dlna">DLNA 投屏</string>
+    <string name="title_dlna_indexed">DLNA 投屏 %1$d/%2$d</string>
+    <string name="title_iphone_mirror">iPhone 屏幕镜像</string>
+    <string name="title_windows_display">Windows 无线显示器</string>
+    <string name="status_waiting_airplay">等待 AirPlay 显示画面...</string>
+    <string name="status_waiting_windows">等待 Windows 画面...</string>
+    <string name="status_receiving_iphone">正在接收 iPhone 屏幕...</string>
+    <string name="status_receiving_windows">正在接收 Windows 屏幕...</string>
+    <string name="status_showing_image">正在显示图片</string>
+    <string name="status_image_error">图片加载错误</string>
+    <string name="error_image_detail">图片加载错误: %s</string>
+    <string name="error_image_decode">无法加载图片</string>
+    <string name="status_slideshow_paused">图片轮播已暂停</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">更多</string>
+    <string name="menu_stream_info">视频信息</string>
+    <string name="menu_stream_info_hide">关闭视频信息</string>
+    <string name="menu_quality">画质</string>
+    <string name="menu_speed">播放速度（%s）</string>
+    <string name="menu_subtitles">字幕</string>
+    <string name="menu_orientation">屏幕方向</string>
+    <string name="subtitles_auto">字幕切换将随媒体字幕轨自动支持</string>
+    <string name="quality_title">选择画质</string>
+    <string name="quality_auto">自动</string>
+    <string name="quality_480">流畅 480p</string>
+    <string name="quality_720">高清 720p</string>
+    <string name="quality_1080">超清 1080p</string>
+    <string name="quality_original">原画</string>
+    <string name="speed_title">播放速度</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">视频信息</string>
+    <string name="info_source_resolution">源分辨率</string>
+    <string name="info_display_resolution">显示分辨率</string>
+    <string name="info_codec">视频编码</string>
+    <string name="info_frame_rate">帧率</string>
+    <string name="info_bitrate">码率</string>
+    <string name="info_network_speed">网速</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">投屏图片</string>
+    <string name="cd_previous">上一个</string>
+    <string name="cd_rewind">后退</string>
+    <string name="cd_play_pause">播放/暂停</string>
+    <string name="cd_fast_forward">前进</string>
+    <string name="cd_next">下一个</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">投屏接收服务</string>
+    <string name="notification_channel_description">保持投屏接收服务运行</string>
+    <string name="notification_waiting">正在等待 AirPlay/DLNA/Miracast 投屏连接</string>
+</resources>

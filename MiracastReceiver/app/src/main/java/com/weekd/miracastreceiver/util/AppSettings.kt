@@ -12,6 +12,7 @@ object AppSettings {
 
     private const val PREFS_NAME = "miracast_settings"
     private const val KEY_AUTO_START_ON_BOOT = "auto_start_on_boot"
+    private const val KEY_LANGUAGE = "language"
 
     /**
      * 是否开机自动启动接收服务。
@@ -24,6 +25,14 @@ object AppSettings {
 
     fun setAutoStartOnBoot(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_AUTO_START_ON_BOOT, enabled).apply()
+    }
+
+    /** 界面语言的 BCP 47 标签，空串表示跟随系统。由 [AppLanguage] 读写。 */
+    fun getLanguageTag(context: Context): String =
+        prefs(context).getString(KEY_LANGUAGE, "") ?: ""
+
+    fun setLanguageTag(context: Context, tag: String) {
+        prefs(context).edit().putString(KEY_LANGUAGE, tag).apply()
     }
 
     private fun prefs(context: Context) =

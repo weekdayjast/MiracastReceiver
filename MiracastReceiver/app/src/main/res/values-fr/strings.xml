@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">En attente d\'une connexion de diffusion…</string>
+    <string name="device_ip">IP de l\'appareil : %s</string>
+    <string name="device_ip_fetching">Détection…</string>
+    <string name="connection_code_label">Code de connexion</string>
+    <string name="how_to_connect">Comment se connecter</string>
+    <string name="connect_instruction">1. Vérifiez que l\'appareil émetteur et le téléviseur sont sur le même réseau local\n2. Ouvrez l\'application de diffusion sur l\'appareil émetteur\n3. Recherchez et sélectionnez cet appareil\n4. Lancez la diffusion</string>
+    <string name="auto_start_on_boot">Démarrer le récepteur au démarrage</string>
+    <string name="auto_start_on_boot_hint">Fonctionne en arrière-plan dès l\'allumage du téléviseur, sans ouvrir l\'application. Sur certains téléviseurs, il faut autoriser le démarrage automatique de cette application dans les paramètres système.</string>
+    <string name="language">Langue</string>
+    <string name="language_follow_system">Langue du système</string>
+    <string name="status_no_network">Aucune connexion réseau</string>
+    <string name="status_no_wifi">Non connecté au Wi-Fi</string>
+    <string name="status_service_starting">Démarrage du service…</string>
+    <string name="status_permission_denied">Autorisation de localisation refusée, la diffusion sans fil depuis Windows est indisponible</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">Autorisation « Superposition sur d\'autres applis » requise</string>
+    <string name="overlay_permission_message">Lorsque l\'application n\'est pas ouverte (par exemple après un démarrage automatique ou un retour à l\'écran d\'accueil), le système empêche l\'écran de diffusion de s\'afficher et la diffusion semble ne pas réagir.\n\nActivez cette autorisation pour l\'application sur la page de paramètres suivante.</string>
+    <string name="overlay_permission_open">Ouvrir les paramètres</string>
+    <string name="overlay_permission_later">Plus tard</string>
+    <string name="overlay_settings_missing">Cet appareil n\'a pas cette page de paramètres. Exécutez via adb : appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">Demande de diffusion</string>
+    <string name="allow">Autoriser</string>
+    <string name="deny">Refuser</string>
+    <string name="remember_device">Mémoriser cet appareil</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">Connecté</string>
+    <string name="playing">Lecture en cours</string>
+    <string name="status_paused">En pause</string>
+    <string name="status_buffering">Mise en mémoire tampon…</string>
+    <string name="status_finished">Lecture terminée</string>
+    <string name="status_playback_error">Erreur de lecture</string>
+    <string name="error_playback_detail">Erreur de lecture : %s</string>
+    <string name="error_unknown">Erreur inconnue</string>
+    <string name="status_speed">Vitesse de lecture : %s</string>
+    <string name="status_quality">Qualité : %s</string>
+    <string name="title_dlna">Diffusion DLNA</string>
+    <string name="title_dlna_indexed">Diffusion DLNA %1$d/%2$d</string>
+    <string name="title_iphone_mirror">Recopie de l\'écran de l\'iPhone</string>
+    <string name="title_windows_display">Affichage sans fil Windows</string>
+    <string name="status_waiting_airplay">En attente de l\'image AirPlay…</string>
+    <string name="status_waiting_windows">En attente de l\'image Windows…</string>
+    <string name="status_receiving_iphone">Réception de l\'écran de l\'iPhone…</string>
+    <string name="status_receiving_windows">Réception de l\'écran Windows…</string>
+    <string name="status_showing_image">Affichage de l\'image</string>
+    <string name="status_image_error">Erreur de chargement de l\'image</string>
+    <string name="error_image_detail">Erreur de chargement de l\'image : %s</string>
+    <string name="error_image_decode">Impossible de charger l\'image</string>
+    <string name="status_slideshow_paused">Diaporama en pause</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">Plus</string>
+    <string name="menu_stream_info">Infos vidéo</string>
+    <string name="menu_stream_info_hide">Masquer les infos vidéo</string>
+    <string name="menu_quality">Qualité</string>
+    <string name="menu_speed">Vitesse de lecture (%s)</string>
+    <string name="menu_subtitles">Sous-titres</string>
+    <string name="menu_orientation">Orientation de l\'écran</string>
+    <string name="subtitles_auto">Les sous-titres suivent automatiquement les pistes de sous-titres du média</string>
+    <string name="quality_title">Choisir la qualité</string>
+    <string name="quality_auto">Auto</string>
+    <string name="quality_480">Fluide 480p</string>
+    <string name="quality_720">HD 720p</string>
+    <string name="quality_1080">Full HD 1080p</string>
+    <string name="quality_original">Originale</string>
+    <string name="speed_title">Vitesse de lecture</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">Infos vidéo</string>
+    <string name="info_source_resolution">Résolution source</string>
+    <string name="info_display_resolution">Résolution affichée</string>
+    <string name="info_codec">Codec vidéo</string>
+    <string name="info_frame_rate">Fréquence d\'images</string>
+    <string name="info_bitrate">Débit</string>
+    <string name="info_network_speed">Vitesse réseau</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">Image diffusée</string>
+    <string name="cd_previous">Précédent</string>
+    <string name="cd_rewind">Retour rapide</string>
+    <string name="cd_play_pause">Lecture/Pause</string>
+    <string name="cd_fast_forward">Avance rapide</string>
+    <string name="cd_next">Suivant</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">Service de réception de diffusion</string>
+    <string name="notification_channel_description">Maintient le service de réception de diffusion actif</string>
+    <string name="notification_waiting">En attente de connexions AirPlay / DLNA / Miracast</string>
+</resources>

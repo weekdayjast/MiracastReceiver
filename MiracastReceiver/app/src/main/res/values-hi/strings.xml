@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">कास्ट कनेक्शन की प्रतीक्षा की जा रही है…</string>
+    <string name="device_ip">डिवाइस IP: %s</string>
+    <string name="device_ip_fetching">पता लगाया जा रहा है…</string>
+    <string name="connection_code_label">कनेक्शन कोड</string>
+    <string name="how_to_connect">कनेक्ट कैसे करें</string>
+    <string name="connect_instruction">1. पक्का करें कि भेजने वाला डिवाइस और टीवी एक ही लोकल नेटवर्क पर हैं\n2. भेजने वाले डिवाइस पर कास्टिंग ऐप खोलें\n3. इस डिवाइस को खोजें और चुनें\n4. कास्ट करना शुरू करें</string>
+    <string name="auto_start_on_boot">चालू होने पर रिसीवर अपने-आप शुरू करें</string>
+    <string name="auto_start_on_boot_hint">टीवी चालू होने के बाद बैकग्राउंड में अपने-आप चलता है, इस ऐप को खोलने की ज़रूरत नहीं। कुछ टीवी पर सिस्टम सेटिंग में इस ऐप को अपने-आप शुरू होने की अनुमति देनी होती है।</string>
+    <string name="language">भाषा</string>
+    <string name="language_follow_system">सिस्टम के अनुसार</string>
+    <string name="status_no_network">नेटवर्क कनेक्ट नहीं है</string>
+    <string name="status_no_wifi">Wi-Fi से कनेक्ट नहीं है</string>
+    <string name="status_service_starting">सेवा शुरू हो रही है…</string>
+    <string name="status_permission_denied">स्थान की अनुमति नहीं दी गई, इसलिए Windows वायरलेस कास्टिंग उपलब्ध नहीं है</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">\"दूसरे ऐप के ऊपर दिखाएं\" अनुमति ज़रूरी है</string>
+    <string name="overlay_permission_message">जब यह ऐप खुला न हो (जैसे चालू होने पर अपने-आप शुरू होने के बाद या होम स्क्रीन पर लौटने के बाद), तो सिस्टम कास्ट स्क्रीन को दिखने से रोक देता है और लगता है कि कास्टिंग काम नहीं कर रही।\n\nकृपया अगले सेटिंग पेज पर इस ऐप के लिए यह अनुमति चालू करें।</string>
+    <string name="overlay_permission_open">सेटिंग खोलें</string>
+    <string name="overlay_permission_later">बाद में</string>
+    <string name="overlay_settings_missing">इस डिवाइस पर यह सेटिंग पेज नहीं है। adb से चलाएं: appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">कास्ट अनुरोध</string>
+    <string name="allow">अनुमति दें</string>
+    <string name="deny">अस्वीकार करें</string>
+    <string name="remember_device">इस डिवाइस को याद रखें</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">कनेक्ट है</string>
+    <string name="playing">चल रहा है</string>
+    <string name="status_paused">रोका गया</string>
+    <string name="status_buffering">बफ़र हो रहा है…</string>
+    <string name="status_finished">प्लेबैक पूरा हुआ</string>
+    <string name="status_playback_error">प्लेबैक त्रुटि</string>
+    <string name="error_playback_detail">प्लेबैक त्रुटि: %s</string>
+    <string name="error_unknown">अज्ञात त्रुटि</string>
+    <string name="status_speed">प्लेबैक गति: %s</string>
+    <string name="status_quality">क्वालिटी: %s</string>
+    <string name="title_dlna">DLNA कास्ट</string>
+    <string name="title_dlna_indexed">DLNA कास्ट %1$d/%2$d</string>
+    <string name="title_iphone_mirror">iPhone स्क्रीन मिररिंग</string>
+    <string name="title_windows_display">Windows वायरलेस डिस्प्ले</string>
+    <string name="status_waiting_airplay">AirPlay की तस्वीर की प्रतीक्षा…</string>
+    <string name="status_waiting_windows">Windows की तस्वीर की प्रतीक्षा…</string>
+    <string name="status_receiving_iphone">iPhone की स्क्रीन प्राप्त हो रही है…</string>
+    <string name="status_receiving_windows">Windows की स्क्रीन प्राप्त हो रही है…</string>
+    <string name="status_showing_image">इमेज दिखाई जा रही है</string>
+    <string name="status_image_error">इमेज लोड करने में त्रुटि</string>
+    <string name="error_image_detail">इमेज लोड करने में त्रुटि: %s</string>
+    <string name="error_image_decode">इमेज लोड नहीं हो सकी</string>
+    <string name="status_slideshow_paused">स्लाइड शो रोका गया</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">और</string>
+    <string name="menu_stream_info">वीडियो जानकारी</string>
+    <string name="menu_stream_info_hide">वीडियो जानकारी छिपाएं</string>
+    <string name="menu_quality">क्वालिटी</string>
+    <string name="menu_speed">प्लेबैक गति (%s)</string>
+    <string name="menu_subtitles">सबटाइटल</string>
+    <string name="menu_orientation">स्क्रीन ओरिएंटेशन</string>
+    <string name="subtitles_auto">सबटाइटल मीडिया के सबटाइटल ट्रैक के हिसाब से अपने-आप बदलते हैं</string>
+    <string name="quality_title">क्वालिटी चुनें</string>
+    <string name="quality_auto">ऑटो</string>
+    <string name="quality_480">स्मूद 480p</string>
+    <string name="quality_720">HD 720p</string>
+    <string name="quality_1080">फ़ुल HD 1080p</string>
+    <string name="quality_original">ओरिजनल</string>
+    <string name="speed_title">प्लेबैक गति</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">वीडियो जानकारी</string>
+    <string name="info_source_resolution">स्रोत रिज़ॉल्यूशन</string>
+    <string name="info_display_resolution">डिस्प्ले रिज़ॉल्यूशन</string>
+    <string name="info_codec">वीडियो कोडेक</string>
+    <string name="info_frame_rate">फ़्रेम दर</string>
+    <string name="info_bitrate">बिटरेट</string>
+    <string name="info_network_speed">नेटवर्क गति</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">कास्ट की गई इमेज</string>
+    <string name="cd_previous">पिछला</string>
+    <string name="cd_rewind">पीछे करें</string>
+    <string name="cd_play_pause">चलाएं/रोकें</string>
+    <string name="cd_fast_forward">आगे करें</string>
+    <string name="cd_next">अगला</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">कास्ट रिसीवर सेवा</string>
+    <string name="notification_channel_description">कास्ट रिसीवर सेवा को चालू रखती है</string>
+    <string name="notification_waiting">AirPlay / DLNA / Miracast कनेक्शन की प्रतीक्षा</string>
+</resources>

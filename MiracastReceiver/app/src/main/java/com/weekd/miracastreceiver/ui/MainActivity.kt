@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -19,6 +20,7 @@ import com.weekd.miracastreceiver.R
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.discovery.MdnsAdvertiser
 import com.weekd.miracastreceiver.service.CastReceiverService
+import com.weekd.miracastreceiver.util.AppLanguage
 import com.weekd.miracastreceiver.util.AppSettings
 import com.weekd.miracastreceiver.utils.NetworkUtils
 import kotlinx.coroutines.delay
@@ -39,6 +41,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvConnectionCode: TextView
     private lateinit var tvStatus: TextView
     private lateinit var switchAutoStart: SwitchCompat
+    private lateinit var tvLanguageValue: TextView
 
     private var connectionCode: String = ""
 
@@ -73,7 +76,12 @@ class MainActivity : AppCompatActivity() {
 
         initServices()
         initViews()
-        requestWifiDirectPermissions()
+        // 切换语言会重建本页（savedInstanceState 非空），这时不要把权限弹窗再弹一遍
+        if (savedInstanceState == null) {
+            requestWifiDirectPermissions()
+        } else {
+            overlayPromptShown = true
+        }
         checkNetworkAndStart()
     }
 
@@ -105,7 +113,7 @@ class MainActivity : AppCompatActivity() {
             startCastService()
         } else {
             Timber.w("Wi-Fi Direct permissions denied — Miracast unavailable")
-            tvStatus.text = "未授予定位权限，Windows 无线投屏不可用"
+            tvStatus.text = getString(R.string.status_permission_denied)
         }
     }
 
@@ -127,13 +135,10 @@ class MainActivity : AppCompatActivity() {
         overlayPromptShown = true
 
         AlertDialog.Builder(this)
-            .setTitle("需要「显示在其他应用上层」权限")
-            .setMessage(
-                "未打开本应用时（例如开机自启后、或退回桌面后），系统会阻止投屏画面自动弹出，" +
-                    "表现为投屏没有反应。\n\n请在接下来的设置页中为本应用开启此权限。"
-            )
-            .setPositiveButton("去设置") { _, _ -> openOverlaySettings() }
-            .setNegativeButton("稍后", null)
+            .setTitle(R.string.overlay_permission_title)
+            .setMessage(R.string.overlay_permission_message)
+            .setPositiveButton(R.string.overlay_permission_open) { _, _ -> openOverlaySettings() }
+            .setNegativeButton(R.string.overlay_permission_later, null)
             .show()
     }
 
@@ -155,7 +160,7 @@ class MainActivity : AppCompatActivity() {
         Timber.w("No overlay permission settings page on this device")
         Toast.makeText(
             this,
-            "此设备没有该设置页，请用 adb 执行：appops set $packageName SYSTEM_ALERT_WINDOW allow",
+            getString(R.string.overlay_settings_missing, packageName),
             Toast.LENGTH_LONG
         ).show()
     }
@@ -174,6 +179,7 @@ class MainActivity : AppCompatActivity() {
         tvConnectionCode = findViewById(R.id.tv_connection_code)
         tvStatus = findViewById(R.id.tv_status)
         switchAutoStart = findViewById(R.id.switch_auto_start)
+        tvLanguageValue = findViewById(R.id.tv_language_value)
 
         // 开机自启开关
         switchAutoStart.isChecked = AppSettings.isAutoStartOnBoot(this)
@@ -182,23 +188,50 @@ class MainActivity : AppCompatActivity() {
             Timber.i("Auto start on boot set to $isChecked")
         }
 
+        // 界面语言
+        findViewById<View>(R.id.setting_language).setOnClickListener { showLanguageDialog() }
+        tvLanguageValue.text = currentLanguageLabel()
+
         // 设置设备名称
         val deviceName = deviceInfoProvider.getDeviceName()
         tvDeviceName.text = deviceName
 
-        // 设置连接码
-        tvConnectionCode.text = getString(R.string.connection_code, connectionCode)
+        // 设置连接码（上方已有「连接码」标签，这里只显示码本身）
+        tvConnectionCode.text = connectionCode
+    }
+
+    /** 第一项是「跟随系统」，其后是 [AppLanguage.OPTIONS]。 */
+    private fun languageLabels(): Array<String> =
+        arrayOf(getString(R.string.language_follow_system)) + AppLanguage.OPTIONS.map { it.second }
+
+    private fun currentLanguageIndex(): Int = AppLanguage.currentIndex() + 1
+
+    private fun currentLanguageLabel(): String = languageLabels()[currentLanguageIndex()]
+
+    private fun showLanguageDialog() {
+        val checked = currentLanguageIndex()
+        AlertDialog.Builder(this)
+            .setTitle(R.string.language)
+            .setSingleChoiceItems(languageLabels(), checked) { dialog, which ->
+                dialog.dismiss()
+                if (which == checked) return@setSingleChoiceItems
+                val tag = if (which == 0) "" else AppLanguage.OPTIONS[which - 1].first
+                Timber.i("Switching app language to '${tag.ifEmpty { "system" }}'")
+                // 会重建当前页面，新页面直接用新语言
+                AppLanguage.apply(this, tag)
+            }
+            .show()
     }
 
     private fun checkNetworkAndStart() {
         if (!NetworkUtils.isNetworkAvailable(this)) {
-            tvStatus.text = "网络未连接"
+            tvStatus.text = getString(R.string.status_no_network)
             Timber.w("Network not available")
             return
         }
 
         if (!NetworkUtils.isWifiConnected(this)) {
-            tvStatus.text = "未连接到 Wi-Fi"
+            tvStatus.text = getString(R.string.status_no_wifi)
             Timber.w("WiFi not connected")
         }
 
@@ -208,7 +241,7 @@ class MainActivity : AppCompatActivity() {
             tvDeviceIp.text = getString(R.string.device_ip, ipAddress)
             Timber.i("Local IP: $ipAddress")
         } else {
-            tvDeviceIp.text = getString(R.string.device_ip, "获取中...")
+            tvDeviceIp.text = getString(R.string.device_ip, getString(R.string.device_ip_fetching))
         }
 
         // 启动服务
@@ -251,7 +284,7 @@ class MainActivity : AppCompatActivity() {
                 if (mdnsAdvertiser.isAdvertising()) {
                     tvStatus.text = getString(R.string.waiting_connection)
                 } else {
-                    tvStatus.text = "服务启动中..."
+                    tvStatus.text = getString(R.string.status_service_starting)
                 }
                 delay(2000)
             }

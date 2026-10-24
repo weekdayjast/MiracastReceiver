@@ -157,7 +157,7 @@ class PlayerActivity : AppCompatActivity() {
                     val speed = intent.getFloatExtra(EXTRA_SPEED, 1f).coerceIn(0.25f, 4f)
                     player?.setPlaybackSpeed(speed)
                     currentSpeed = speed
-                    tvStatus.text = "播放速度：${speed}x"
+                    tvStatus.text = getString(R.string.status_speed, "${speed}x")
                     reportPlaybackPosition()
                 }
                 ACTION_SET_QUALITY_URL -> {
@@ -244,7 +244,7 @@ class PlayerActivity : AppCompatActivity() {
                             Player.STATE_IDLE -> Timber.d("Player state: IDLE")
                             Player.STATE_BUFFERING -> {
                                 Timber.d("Player state: BUFFERING")
-                                tvStatus.text = "正在缓冲..."
+                                tvStatus.text = getString(R.string.status_buffering)
                             }
                             Player.STATE_READY -> {
                                 Timber.d("Player state: READY")
@@ -255,7 +255,7 @@ class PlayerActivity : AppCompatActivity() {
                             }
                             Player.STATE_ENDED -> {
                                 Timber.d("Player state: ENDED")
-                                tvStatus.text = "播放完成"
+                                tvStatus.text = getString(R.string.status_finished)
                                 reportPlaybackPosition()
                                 playNextOrFinish()
                             }
@@ -267,7 +267,7 @@ class PlayerActivity : AppCompatActivity() {
                         // 刚写好的「正在缓冲...」覆盖成「已暂停」，那会让人以为是暂停了
                         tvStatus.text = when {
                             isPlaying -> getString(R.string.playing)
-                            playbackState == Player.STATE_READY -> "已暂停"
+                            playbackState == Player.STATE_READY -> getString(R.string.status_paused)
                             else -> return
                         }
                     }
@@ -275,8 +275,7 @@ class PlayerActivity : AppCompatActivity() {
                     override fun onPlayerError(error: PlaybackException) {
                         Timber.e(error, "Player error")
                         updateBufferingState(false)
-                        tvStatus.text = "播放错误"
-                        tvError.text = "播放错误: ${error.message ?: "未知错误"}"
+                        showPlaybackError(error.message)
                         tvError.visibility = View.VISIBLE
                     }
                 })
@@ -312,15 +311,15 @@ class PlayerActivity : AppCompatActivity() {
     /** 「更多」弹窗：控制条精简后，低频功能都收到这里。 */
     private fun showMoreMenu() {
         val labels = arrayOf(
-            if (isStreamInfoVisible) "关闭视频信息" else "视频信息",
-            "画质",
-            "播放速度（${formatSpeedLabel(currentSpeed)}）",
-            "字幕",
-            "屏幕方向"
+            getString(if (isStreamInfoVisible) R.string.menu_stream_info_hide else R.string.menu_stream_info),
+            getString(R.string.menu_quality),
+            getString(R.string.menu_speed, formatSpeedLabel(currentSpeed)),
+            getString(R.string.menu_subtitles),
+            getString(R.string.menu_orientation)
         )
         isDialogShowing = true
         AlertDialog.Builder(this)
-            .setTitle("更多")
+            .setTitle(R.string.more)
             .setItems(labels) { _, which ->
                 // 本弹窗关闭后再打开下一级弹窗，否则 onDismiss 会把 isDialogShowing 误置回 false
                 tvStatus.post {
@@ -328,7 +327,7 @@ class PlayerActivity : AppCompatActivity() {
                         0 -> toggleStreamInfo()
                         1 -> showQualityDialog()
                         2 -> showSpeedDialog()
-                        3 -> Toast.makeText(this, "字幕切换将随媒体字幕轨自动支持", Toast.LENGTH_SHORT).show()
+                        3 -> Toast.makeText(this, R.string.subtitles_auto, Toast.LENGTH_SHORT).show()
                         4 -> toggleOrientation()
                     }
                 }
@@ -464,7 +463,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun playCurrent() {
         mediaUri = playlist.getOrNull(currentIndex)
-        mediaTitle = playlistTitles.getOrNull(currentIndex) ?: "DLNA 投屏 ${currentIndex + 1}/${playlist.size}"
+        mediaTitle = playlistTitles.getOrNull(currentIndex) ?: getString(R.string.title_dlna_indexed, currentIndex + 1, playlist.size)
         tvTitle.text = mediaTitle
         val uri = mediaUri ?: return
         if (isImageUri(uri)) {
@@ -487,8 +486,8 @@ class PlayerActivity : AppCompatActivity() {
         playerView.visibility = View.GONE
         mirrorSurfaceView.visibility = View.VISIBLE
         imageView.visibility = View.GONE
-        tvTitle.text = "iPhone 屏幕镜像"
-        tvStatus.text = "正在接收 iPhone 屏幕..."
+        tvTitle.text = getString(R.string.title_iphone_mirror)
+        tvStatus.text = getString(R.string.status_receiving_iphone)
         tvError.visibility = View.GONE
         updateBufferingState(false)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -504,8 +503,12 @@ class PlayerActivity : AppCompatActivity() {
      * 变化并置空，否则解码器会往失效的 Surface 上写，画面一直黑。
      */
     private fun publishMirrorSurface() {
-        val waitingText = if (isMiracastSession) "等待 Windows 画面..." else "等待 AirPlay 显示画面..."
-        val activeText = if (isMiracastSession) "正在接收 Windows 屏幕..." else "正在接收 iPhone 屏幕..."
+        val waitingText = getString(
+            if (isMiracastSession) R.string.status_waiting_windows else R.string.status_waiting_airplay
+        )
+        val activeText = getString(
+            if (isMiracastSession) R.string.status_receiving_windows else R.string.status_receiving_iphone
+        )
 
         fun publish(holder: SurfaceHolder) {
             mirrorSurface = holder.surface.takeIf { it.isValid }
@@ -591,8 +594,8 @@ class PlayerActivity : AppCompatActivity() {
         playerView.visibility = View.GONE
         imageView.visibility = View.GONE
         mirrorSurfaceView.visibility = View.VISIBLE
-        tvTitle.text = "Windows 无线显示器"
-        tvStatus.text = "正在接收 Windows 屏幕..."
+        tvTitle.text = getString(R.string.title_windows_display)
+        tvStatus.text = getString(R.string.status_receiving_windows)
         tvError.visibility = View.GONE
         updateBufferingState(false)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
@@ -632,11 +635,15 @@ class PlayerActivity : AppCompatActivity() {
             player?.play()
         } catch (e: Exception) {
             Timber.e(e, "Error playing media")
-            tvStatus.text = "播放错误"
-            tvError.text = "播放错误: ${e.message ?: "未知错误"}"
+            showPlaybackError(e.message)
             tvError.visibility = View.VISIBLE
             updateBufferingState(false)
         }
+    }
+
+    private fun showPlaybackError(message: String?) {
+        tvStatus.text = getString(R.string.status_playback_error)
+        tvError.text = getString(R.string.error_playback_detail, message ?: getString(R.string.error_unknown))
     }
 
     private fun createMediaItem(uri: String): MediaItem {
@@ -661,7 +668,7 @@ class PlayerActivity : AppCompatActivity() {
         playerView.visibility = View.GONE
         imageView.visibility = View.VISIBLE
         tvError.visibility = View.GONE
-        tvStatus.text = "正在显示图片"
+        tvStatus.text = getString(R.string.status_showing_image)
         updateBufferingState(true)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
 
@@ -680,13 +687,13 @@ class PlayerActivity : AppCompatActivity() {
                     adaptOrientationToImage(bitmap.width, bitmap.height)
                     startImageSlideShow()
                 } else {
-                    throw IllegalArgumentException("无法加载图片")
+                    throw IllegalArgumentException(getString(R.string.error_image_decode))
                 }
             } catch (e: Exception) {
                 Timber.e(e, "Error showing image")
                 updateBufferingState(false)
-                tvStatus.text = "图片加载错误"
-                tvError.text = "图片加载错误: ${e.message ?: "未知错误"}"
+                tvStatus.text = getString(R.string.status_image_error)
+                tvError.text = getString(R.string.error_image_detail, e.message ?: getString(R.string.error_unknown))
                 tvError.visibility = View.VISIBLE
             }
         }
@@ -706,7 +713,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun stopImageSlideShow() {
         slideJob?.cancel()
         slideJob = null
-        if (isCurrentImage()) tvStatus.text = "图片轮播已暂停"
+        if (isCurrentImage()) tvStatus.text = getString(R.string.status_slideshow_paused)
     }
 
     private fun playNextOrFinish(loopImages: Boolean = false) {
@@ -827,15 +834,17 @@ class PlayerActivity : AppCompatActivity() {
     ): String {
         val (displayW, displayH) = currentDisplaySize()
         val rows = listOf(
-            "源分辨率" to resolution,
-            "显示分辨率" to StreamInfoTracker.formatResolution(displayW, displayH),
-            "视频编码" to codec,
-            "帧率" to fps,
-            "码率" to bitrate,
-            "网速" to speed
+            getString(R.string.info_source_resolution) to resolution,
+            getString(R.string.info_display_resolution) to StreamInfoTracker.formatResolution(displayW, displayH),
+            getString(R.string.info_codec) to codec,
+            getString(R.string.info_frame_rate) to fps,
+            getString(R.string.info_bitrate) to bitrate,
+            getString(R.string.info_network_speed) to speed
         )
-        return rows.joinToString("\n", prefix = "视频信息\n") { (label, value) ->
-            StreamInfoTracker.padLabel(label) + value
+        // 各语言标签长短差别很大（英文、俄文远比中文长），按最长标签对齐值列
+        val columns = rows.maxOf { StreamInfoTracker.labelWidth(it.first) } + 2
+        return rows.joinToString("\n", prefix = getString(R.string.info_title) + "\n") { (label, value) ->
+            StreamInfoTracker.padLabel(label, columns) + value
         }
     }
 
@@ -854,12 +863,18 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun showQualityDialog() {
-        val labels = arrayOf("自动", "流畅 480p", "高清 720p", "超清 1080p", "原画")
+        val labels = arrayOf(
+            getString(R.string.quality_auto),
+            getString(R.string.quality_480),
+            getString(R.string.quality_720),
+            getString(R.string.quality_1080),
+            getString(R.string.quality_original)
+        )
         val heights = intArrayOf(QUALITY_AUTO, 480, 720, 1080, Int.MAX_VALUE)
         val checked = heights.indexOf(qualityHeight).takeIf { it >= 0 } ?: 0
         isDialogShowing = true
         AlertDialog.Builder(this)
-            .setTitle("选择画质")
+            .setTitle(R.string.quality_title)
             .setSingleChoiceItems(labels, checked) { dialog, which ->
                 qualityHeight = heights[which]
                 applyQuality(qualityHeight)
@@ -877,7 +892,10 @@ class PlayerActivity : AppCompatActivity() {
             else -> builder.setMaxVideoSize(Int.MAX_VALUE, height)
         }
         trackSelector?.setParameters(builder)
-        tvStatus.text = if (height == QUALITY_AUTO) "画质：自动" else "画质：${height}p"
+        tvStatus.text = getString(
+            R.string.status_quality,
+            if (height == QUALITY_AUTO) getString(R.string.quality_auto) else "${height}p"
+        )
     }
 
     private fun showSpeedDialog() {
@@ -885,11 +903,11 @@ class PlayerActivity : AppCompatActivity() {
         val speeds = floatArrayOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f)
         isDialogShowing = true
         AlertDialog.Builder(this)
-            .setTitle("播放速度")
+            .setTitle(R.string.speed_title)
             .setItems(labels) { _, which ->
                 player?.setPlaybackSpeed(speeds[which])
                 currentSpeed = speeds[which]
-                tvStatus.text = "播放速度：${labels[which]}"
+                tvStatus.text = getString(R.string.status_speed, labels[which])
             }
             .setOnDismissListener { isDialogShowing = false }
             .show()

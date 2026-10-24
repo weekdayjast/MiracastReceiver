@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 首页 -->
+    <string name="waiting_connection">กำลังรอการเชื่อมต่อแคสต์…</string>
+    <string name="device_ip">IP ของอุปกรณ์: %s</string>
+    <string name="device_ip_fetching">กำลังตรวจหา…</string>
+    <string name="connection_code_label">รหัสเชื่อมต่อ</string>
+    <string name="how_to_connect">วิธีเชื่อมต่อ</string>
+    <string name="connect_instruction">1. ตรวจสอบว่าอุปกรณ์ที่ส่งและทีวีอยู่ในเครือข่ายเดียวกัน\n2. เปิดแอปแคสต์บนอุปกรณ์ที่ส่ง\n3. ค้นหาและเลือกอุปกรณ์นี้\n4. เริ่มแคสต์</string>
+    <string name="auto_start_on_boot">เริ่มบริการรับสัญญาณอัตโนมัติเมื่อเปิดเครื่อง</string>
+    <string name="auto_start_on_boot_hint">ทำงานในพื้นหลังโดยอัตโนมัติเมื่อเปิดทีวี ไม่ต้องเปิดแอปนี้เอง ทีวีบางรุ่นต้องอนุญาตให้แอปนี้เริ่มทำงานอัตโนมัติในการตั้งค่าระบบ</string>
+    <string name="language">ภาษา</string>
+    <string name="language_follow_system">ตามระบบ</string>
+    <string name="status_no_network">ไม่ได้เชื่อมต่อเครือข่าย</string>
+    <string name="status_no_wifi">ไม่ได้เชื่อมต่อ Wi-Fi</string>
+    <string name="status_service_starting">กำลังเริ่มบริการ…</string>
+    <string name="status_permission_denied">ไม่ได้รับสิทธิ์เข้าถึงตำแหน่ง จึงใช้การแคสต์ไร้สายจาก Windows ไม่ได้</string>
+
+    <!-- 悬浮窗权限 -->
+    <string name="overlay_permission_title">ต้องใช้สิทธิ์ \"แสดงทับแอปอื่น\"</string>
+    <string name="overlay_permission_message">เมื่อไม่ได้เปิดแอปนี้ไว้ (เช่น หลังเริ่มทำงานอัตโนมัติตอนเปิดเครื่อง หรือหลังกลับไปหน้าหลัก) ระบบจะบล็อกไม่ให้หน้าจอแคสต์แสดงขึ้นมา ทำให้ดูเหมือนว่าแคสต์ไม่ตอบสนอง\n\nโปรดเปิดสิทธิ์นี้ให้แอปในหน้าการตั้งค่าถัดไป</string>
+    <string name="overlay_permission_open">ไปที่การตั้งค่า</string>
+    <string name="overlay_permission_later">ภายหลัง</string>
+    <string name="overlay_settings_missing">อุปกรณ์นี้ไม่มีหน้าการตั้งค่าดังกล่าว โปรดใช้ adb รันคำสั่ง: appops set %s SYSTEM_ALERT_WINDOW allow</string>
+
+    <!-- 连接确认 -->
+    <string name="connect_request">คำขอแคสต์</string>
+    <string name="allow">อนุญาต</string>
+    <string name="deny">ปฏิเสธ</string>
+    <string name="remember_device">จดจำอุปกรณ์นี้</string>
+
+    <!-- 播放页面 -->
+    <string name="connected">เชื่อมต่อแล้ว</string>
+    <string name="playing">กำลังเล่น</string>
+    <string name="status_paused">หยุดชั่วคราว</string>
+    <string name="status_buffering">กำลังบัฟเฟอร์…</string>
+    <string name="status_finished">เล่นจบแล้ว</string>
+    <string name="status_playback_error">ข้อผิดพลาดในการเล่น</string>
+    <string name="error_playback_detail">ข้อผิดพลาดในการเล่น: %s</string>
+    <string name="error_unknown">ข้อผิดพลาดที่ไม่รู้จัก</string>
+    <string name="status_speed">ความเร็วในการเล่น: %s</string>
+    <string name="status_quality">คุณภาพ: %s</string>
+    <string name="title_dlna">แคสต์ DLNA</string>
+    <string name="title_dlna_indexed">แคสต์ DLNA %1$d/%2$d</string>
+    <string name="title_iphone_mirror">การสะท้อนหน้าจอ iPhone</string>
+    <string name="title_windows_display">จอแสดงผลไร้สาย Windows</string>
+    <string name="status_waiting_airplay">กำลังรอภาพจาก AirPlay…</string>
+    <string name="status_waiting_windows">กำลังรอภาพจาก Windows…</string>
+    <string name="status_receiving_iphone">กำลังรับหน้าจอ iPhone…</string>
+    <string name="status_receiving_windows">กำลังรับหน้าจอ Windows…</string>
+    <string name="status_showing_image">กำลังแสดงรูปภาพ</string>
+    <string name="status_image_error">โหลดรูปภาพผิดพลาด</string>
+    <string name="error_image_detail">โหลดรูปภาพผิดพลาด: %s</string>
+    <string name="error_image_decode">ไม่สามารถโหลดรูปภาพได้</string>
+    <string name="status_slideshow_paused">หยุดสไลด์โชว์ชั่วคราว</string>
+
+    <!-- 「更多」菜单 -->
+    <string name="more">เพิ่มเติม</string>
+    <string name="menu_stream_info">ข้อมูลวิดีโอ</string>
+    <string name="menu_stream_info_hide">ปิดข้อมูลวิดีโอ</string>
+    <string name="menu_quality">คุณภาพ</string>
+    <string name="menu_speed">ความเร็วในการเล่น (%s)</string>
+    <string name="menu_subtitles">คำบรรยาย</string>
+    <string name="menu_orientation">การวางแนวหน้าจอ</string>
+    <string name="subtitles_auto">คำบรรยายจะสลับตามแทร็กคำบรรยายของสื่อโดยอัตโนมัติ</string>
+    <string name="quality_title">เลือกคุณภาพ</string>
+    <string name="quality_auto">อัตโนมัติ</string>
+    <string name="quality_480">ลื่นไหล 480p</string>
+    <string name="quality_720">HD 720p</string>
+    <string name="quality_1080">Full HD 1080p</string>
+    <string name="quality_original">ต้นฉบับ</string>
+    <string name="speed_title">ความเร็วในการเล่น</string>
+
+    <!-- 视频信息面板 -->
+    <string name="info_title">ข้อมูลวิดีโอ</string>
+    <string name="info_source_resolution">ความละเอียดต้นฉบับ</string>
+    <string name="info_display_resolution">ความละเอียดที่แสดง</string>
+    <string name="info_codec">ตัวแปลงสัญญาณวิดีโอ</string>
+    <string name="info_frame_rate">อัตราเฟรม</string>
+    <string name="info_bitrate">บิตเรต</string>
+    <string name="info_network_speed">ความเร็วเครือข่าย</string>
+
+    <!-- 控制条无障碍描述 -->
+    <string name="cd_cast_image">รูปภาพที่แคสต์</string>
+    <string name="cd_previous">ก่อนหน้า</string>
+    <string name="cd_rewind">ย้อนกลับ</string>
+    <string name="cd_play_pause">เล่น/หยุดชั่วคราว</string>
+    <string name="cd_fast_forward">กรอไปข้างหน้า</string>
+    <string name="cd_next">ถัดไป</string>
+
+    <!-- 前台服务通知 -->
+    <string name="notification_channel_name">บริการรับการแคสต์</string>
+    <string name="notification_channel_description">ทำให้บริการรับการแคสต์ทำงานต่อเนื่อง</string>
+    <string name="notification_waiting">กำลังรอการเชื่อมต่อ AirPlay / DLNA / Miracast</string>
+</resources>
