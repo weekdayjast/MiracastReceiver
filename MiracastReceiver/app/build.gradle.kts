@@ -108,9 +108,6 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.5.0")
     implementation("androidx.media3:media3-common:1.5.0")
 
-    // WebRTC
-    implementation("org.webrtc:google-webrtc:1.0.32006")
-
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")
 
