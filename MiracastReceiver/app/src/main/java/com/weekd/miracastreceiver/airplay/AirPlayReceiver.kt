@@ -187,6 +187,11 @@ class AirPlayReceiver(
      * AirPlay sender — e.g. play/pause or skip what the Mac/iPhone is streaming. No-op if no sender
      * has advertised a DACP identity yet.
      */
+    /** 播放页换了渲染 Surface（手动旋转、切后台回来）时调用：让 URL 视频播放器重新挂到新 Surface 上。 */
+    fun onVideoSurfaceChanged() {
+        urlVideoPlayer?.attachSurface()
+    }
+
     fun sendRemoteCommand(command: String) = dacpClient.sendCommand(command)
 
     /** True once a sender has advertised DACP reverse-control (so the TV remote can drive playback). */

@@ -4,7 +4,6 @@
     <string name="waiting_connection">等待投屏连接...</string>
     <string name="device_ip">设备 IP: %s</string>
     <string name="device_ip_fetching">获取中...</string>
-    <string name="connection_code_label">连接码</string>
     <string name="how_to_connect">如何连接</string>
     <string name="connect_instruction">1. 确保发送设备与电视在同一局域网\n2. 打开发送端应用\n3. 扫描并选择此设备\n4. 开始投屏</string>
     <string name="auto_start_on_boot">开机自动启动接收服务</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">画质</string>
     <string name="menu_speed">播放速度（%s）</string>
     <string name="menu_subtitles">字幕</string>
-    <string name="menu_orientation">屏幕方向</string>
     <string name="subtitles_auto">字幕切换将随媒体字幕轨自动支持</string>
     <string name="quality_title">选择画质</string>
     <string name="quality_auto">自动</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">投屏图片</string>
+    <string name="cd_rotate_screen">旋转画面</string>
     <string name="cd_previous">上一个</string>
     <string name="cd_rewind">后退</string>
     <string name="cd_play_pause">播放/暂停</string>

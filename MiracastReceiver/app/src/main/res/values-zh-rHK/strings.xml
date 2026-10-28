@@ -5,7 +5,6 @@
     <string name="waiting_connection">等待投影連線...</string>
     <string name="device_ip">裝置 IP: %s</string>
     <string name="device_ip_fetching">取得中...</string>
-    <string name="connection_code_label">連線碼</string>
     <string name="how_to_connect">如何連線</string>
     <string name="connect_instruction">1. 確認傳送裝置與電視位於同一區域網路\n2. 開啟傳送端應用程式\n3. 搜尋並選擇此裝置\n4. 開始投影</string>
     <string name="auto_start_on_boot">開機自動啟動接收服務</string>
@@ -62,7 +61,6 @@
     <string name="menu_quality">畫質</string>
     <string name="menu_speed">播放速度（%s）</string>
     <string name="menu_subtitles">字幕</string>
-    <string name="menu_orientation">螢幕方向</string>
     <string name="subtitles_auto">字幕會依媒體的字幕軌自動切換</string>
     <string name="quality_title">選擇畫質</string>
     <string name="quality_auto">自動</string>
@@ -83,6 +81,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">投影圖片</string>
+    <string name="cd_rotate_screen">旋轉畫面</string>
     <string name="cd_previous">上一個</string>
     <string name="cd_rewind">倒轉</string>
     <string name="cd_play_pause">播放/暫停</string>

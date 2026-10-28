@@ -4,7 +4,6 @@
     <string name="waiting_connection">キャスト接続を待機中…</string>
     <string name="device_ip">デバイス IP: %s</string>
     <string name="device_ip_fetching">取得中…</string>
-    <string name="connection_code_label">接続コード</string>
     <string name="how_to_connect">接続方法</string>
     <string name="connect_instruction">1. 送信側デバイスとテレビが同じローカルネットワークにあることを確認\n2. 送信側でキャスト用アプリを開く\n3. このデバイスを検索して選択\n4. キャストを開始</string>
     <string name="auto_start_on_boot">起動時に受信サービスを自動開始</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">画質</string>
     <string name="menu_speed">再生速度（%s）</string>
     <string name="menu_subtitles">字幕</string>
-    <string name="menu_orientation">画面の向き</string>
     <string name="subtitles_auto">字幕はメディアの字幕トラックに合わせて自動で切り替わります</string>
     <string name="quality_title">画質を選択</string>
     <string name="quality_auto">自動</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">キャスト画像</string>
+    <string name="cd_rotate_screen">画面を回転</string>
     <string name="cd_previous">前へ</string>
     <string name="cd_rewind">巻き戻し</string>
     <string name="cd_play_pause">再生/一時停止</string>

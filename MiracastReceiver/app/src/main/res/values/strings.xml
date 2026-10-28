@@ -7,7 +7,6 @@
     <string name="waiting_connection">Waiting for a cast connection…</string>
     <string name="device_ip">Device IP: %s</string>
     <string name="device_ip_fetching">Detecting…</string>
-    <string name="connection_code_label">Connection code</string>
     <string name="how_to_connect">How to connect</string>
     <string name="connect_instruction">1. Make sure the sending device and the TV are on the same local network\n2. Open the casting app on the sender\n3. Scan for and select this device\n4. Start casting</string>
     <string name="auto_start_on_boot">Start receiver on boot</string>
@@ -64,7 +63,6 @@
     <string name="menu_quality">Quality</string>
     <string name="menu_speed">Playback speed (%s)</string>
     <string name="menu_subtitles">Subtitles</string>
-    <string name="menu_orientation">Screen orientation</string>
     <string name="subtitles_auto">Subtitles follow the media\'s subtitle tracks automatically</string>
     <string name="quality_title">Select quality</string>
     <string name="quality_auto">Auto</string>
@@ -85,6 +83,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">Cast image</string>
+    <string name="cd_rotate_screen">Rotate screen</string>
     <string name="cd_previous">Previous</string>
     <string name="cd_rewind">Rewind</string>
     <string name="cd_play_pause">Play/Pause</string>

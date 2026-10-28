@@ -2,6 +2,7 @@
 
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.os.Build
 import android.view.Surface
 import com.weekd.miracastreceiver.util.Logger
 
@@ -275,6 +276,24 @@ class VideoDecoder(private val outputSurface: Surface) {
      *
      * After release(), call initialize() again before using the decoder.
      */
+    /**
+     * 不重建解码器、直接把输出切到另一块 Surface（API 23+ 的 setOutputSurface）。
+     * 手动旋转画面时 SurfaceView ↔ TextureView 来回切靠它：重建解码器要等下一个 IDR，
+     * 静止画面下 iPhone 可能好几秒都不发关键帧，期间会一直黑屏。
+     * 返回 false 表示不支持或切换失败，调用方应退回重建解码器。
+     */
+    fun switchOutputSurface(surface: Surface): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return false
+        val codec = mediaCodec ?: return false
+        return try {
+            codec.setOutputSurface(surface)
+            true
+        } catch (e: Exception) {
+            Logger.w("VideoDecoder: setOutputSurface failed, caller will rebuild (${e.message})")
+            false
+        }
+    }
+
     fun release() {
         Logger.d("Releasing VideoDecoder")
 

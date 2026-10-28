@@ -4,7 +4,6 @@
     <string name="waiting_connection">कास्ट कनेक्शन की प्रतीक्षा की जा रही है…</string>
     <string name="device_ip">डिवाइस IP: %s</string>
     <string name="device_ip_fetching">पता लगाया जा रहा है…</string>
-    <string name="connection_code_label">कनेक्शन कोड</string>
     <string name="how_to_connect">कनेक्ट कैसे करें</string>
     <string name="connect_instruction">1. पक्का करें कि भेजने वाला डिवाइस और टीवी एक ही लोकल नेटवर्क पर हैं\n2. भेजने वाले डिवाइस पर कास्टिंग ऐप खोलें\n3. इस डिवाइस को खोजें और चुनें\n4. कास्ट करना शुरू करें</string>
     <string name="auto_start_on_boot">चालू होने पर रिसीवर अपने-आप शुरू करें</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">क्वालिटी</string>
     <string name="menu_speed">प्लेबैक गति (%s)</string>
     <string name="menu_subtitles">सबटाइटल</string>
-    <string name="menu_orientation">स्क्रीन ओरिएंटेशन</string>
     <string name="subtitles_auto">सबटाइटल मीडिया के सबटाइटल ट्रैक के हिसाब से अपने-आप बदलते हैं</string>
     <string name="quality_title">क्वालिटी चुनें</string>
     <string name="quality_auto">ऑटो</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">कास्ट की गई इमेज</string>
+    <string name="cd_rotate_screen">स्क्रीन घुमाएं</string>
     <string name="cd_previous">पिछला</string>
     <string name="cd_rewind">पीछे करें</string>
     <string name="cd_play_pause">चलाएं/रोकें</string>

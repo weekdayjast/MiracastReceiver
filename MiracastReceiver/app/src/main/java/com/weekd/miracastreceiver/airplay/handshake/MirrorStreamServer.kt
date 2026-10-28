@@ -63,6 +63,14 @@ class MirrorStreamServer(
     // Set by the reader thread when a frame is dropped under load; the decoder thread then skips
     // frames until the next keyframe (IDR) so it never decodes a reference-broken, corrupt stream.
     @Volatile private var awaitingKeyframe = false
+    // 从最近一个关键帧（IDR）开始的所有帧。解码器不得不重建时（Surface 换了且不支持原地切换、
+    // 切后台回来）立刻把这一组重新喂一遍就能出画面，不用干等下一个 IDR —— 镜像画面静止时
+    // iPhone 可能很久才发一次关键帧，期间会一直黑屏。只在解码线程里读写。
+    private val gopCache = ArrayList<ByteArray>()
+    private var gopCacheBytes = 0
+    private var gopCacheValid = false
+    // 读线程丢帧时置位，解码线程据此作废缓存（缺帧的 GOP 重放出来是花的）
+    @Volatile private var gopCacheBroken = false
     // Set while an AirPlay video-URL handoff owns the Surface (iOS plays a full-screen web/app video
     // during a mirror and POSTs /play). A Surface takes only ONE producer at a time, so the decoder
     // thread releases its MediaCodec (freeing the Surface for MediaPlayer) and drops frames until
@@ -157,6 +165,7 @@ class MirrorStreamServer(
             queue.offer(item)
             framesDropped++
             awaitingKeyframe = true        // a frame was lost — resync the decoder at the next IDR
+            gopCacheBroken = true
         }
         StreamStats.videoQueue = queue.size
         if (framesIn % 300 == 0) {
@@ -208,6 +217,7 @@ class MirrorStreamServer(
     private fun releaseForSuspend() {
         decoder?.let { it.release(); decoder = null }
         configuredSurface = null        // forces a rebuild against the live Surface on resume
+        clearGopCache()                 // 暂停期间的帧都丢了，缓存不再连续
         suspendLatch?.let { it.countDown(); suspendLatch = null }
     }
 
@@ -219,6 +229,7 @@ class MirrorStreamServer(
             surface === configuredSurface) return
         lastSps = sps
         lastPps = pps
+        clearGopCache()                    // 新配置（可能换了分辨率）之后旧帧不能再用
         rebuildDecoder(surface)
     }
 
@@ -243,13 +254,45 @@ class MirrorStreamServer(
         Logger.i("Mirror decoder (re)built for surface (sps=${sps.size}B pps=${pps.size}B)")
     }
 
+    private fun clearGopCache() {
+        gopCache.clear()
+        gopCacheBytes = 0
+        gopCacheValid = false
+    }
+
+    private fun cacheFrame(annexB: ByteArray) {
+        if (gopCacheBroken) {
+            gopCacheBroken = false
+            clearGopCache()
+        }
+        if (isKeyframe(annexB)) {
+            clearGopCache()
+            gopCacheValid = true
+        }
+        if (!gopCacheValid) return
+        gopCache.add(annexB)
+        gopCacheBytes += annexB.size
+        // GOP 太长就放弃缓存（重放太久反而慢），退回等下一个关键帧
+        if (gopCache.size > GOP_CACHE_MAX_FRAMES || gopCacheBytes > GOP_CACHE_MAX_BYTES) clearGopCache()
+    }
+
     private fun decodeFrame(annexB: ByteArray) {
+        cacheFrame(annexB)
         // Re-attach to the live Surface if it changed (the app was backgrounded and returned, so the
         // SurfaceView made a new Surface). Without this, video stays black after foregrounding.
         val liveSurface = surfaceProvider()
         if (liveSurface !== configuredSurface) {
-            Logger.i("Mirror: surface ${if (liveSurface == null) "lost" else "changed"} — re-attaching decoder")
-            rebuildDecoder(liveSurface)
+            val current = decoder
+            if (current != null && current.isHealthy && liveSurface != null && liveSurface.isValid &&
+                current.switchOutputSurface(liveSurface)) {
+                // 手动旋转等场景：直接换输出 Surface，不用等关键帧
+                Logger.i("Mirror: surface changed — switched decoder output in place")
+                configuredSurface = liveSurface
+            } else {
+                Logger.i("Mirror: surface ${if (liveSurface == null) "lost" else "changed"} — re-attaching decoder")
+                rebuildDecoder(liveSurface)
+                if (replayGopCache()) return            // 缓存里已包含当前帧
+            }
         }
         val d = decoder ?: return                              // need surface + SPS/PPS first
         if (!d.isHealthy) {                                    // error state — drop, await next config
@@ -267,6 +310,19 @@ class MirrorStreamServer(
         if (framePtsUs == 0L) Logger.i("Mirror: first video frame fed to decoder (${annexB.size}B)")
         d.decodeNalUnit(annexB, framePtsUs)
         framePtsUs += FRAME_INTERVAL_US
+    }
+
+    /** 新建的解码器立刻重放缓存的 GOP（含当前帧），马上恢复画面。缓存不可用时返回 false。 */
+    private fun replayGopCache(): Boolean {
+        val d = decoder ?: return false
+        if (!gopCacheValid || gopCache.isEmpty()) return false
+        for (frame in gopCache) {
+            d.decodeNalUnit(frame, framePtsUs)
+            framePtsUs += FRAME_INTERVAL_US
+        }
+        awaitingKeyframe = false
+        Logger.i("Mirror: replayed ${gopCache.size} cached frames (${gopCacheBytes / 1024}KB) — no wait for next IDR")
+        return true
     }
 
     /** True if the Annex-B frame contains an IDR NAL unit (type 5) — a decodable resync point. */
@@ -314,6 +370,8 @@ class MirrorStreamServer(
         private const val MAX_PAYLOAD = 8 * 1024 * 1024        // 8 MB sanity cap per frame
         private const val FRAME_INTERVAL_US = 1_000_000L / 60  // monotonic PTS hint (~60fps)
         private const val QUEUE_CAPACITY = 90                  // ~1.5s @60fps before dropping
+        private const val GOP_CACHE_MAX_FRAMES = 600           // ~10s @60fps
+        private const val GOP_CACHE_MAX_BYTES = 24 * 1024 * 1024
         private const val SURFACE_WAIT_TRIES = 50
         private const val SURFACE_WAIT_MS = 100L
         private const val SUSPEND_TIMEOUT_MS = 2000L

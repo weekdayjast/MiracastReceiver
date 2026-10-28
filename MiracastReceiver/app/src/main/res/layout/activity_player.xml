@@ -26,6 +26,21 @@
         android:layout_gravity="center"
         android:visibility="gone" />
 
+    <!-- 镜像画面旋转层：旋转角度不为 0 时才显示，解码器改往这块 TextureView 送帧（SurfaceView 不支持旋转内容）。
+         黑底盖住下面的 SurfaceView；0° 时隐藏，继续走 SurfaceView 的硬件视频层，电视 4K 性能不受影响。 -->
+    <FrameLayout
+        android:id="@+id/mirror_rotate_layer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#000000"
+        android:visibility="gone">
+
+        <TextureView
+            android:id="@+id/mirror_rotate_texture"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </FrameLayout>
+
     <!-- 图片轮播视图 -->
     <ImageView
         android:id="@+id/image_view"
@@ -94,6 +109,21 @@
         android:visibility="gone"
         tools:text="视频信息\n分辨率  1920x1080"
         tools:visibility="visible" />
+
+    <!-- 手动旋转浮动按钮：镜像/Miracast/图片模式用（没有控制条）。点屏幕或按遥控器 OK/上下键呼出，几秒后自动隐藏 -->
+    <ImageButton
+        android:id="@+id/btn_rotate_overlay"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="24dp"
+        android:background="@drawable/bg_rotate_button"
+        android:focusable="true"
+        android:contentDescription="@string/cd_rotate_screen"
+        android:padding="14dp"
+        android:scaleType="fitCenter"
+        android:src="@drawable/ic_rotate"
+        android:visibility="gone" />
 
     <!-- 加载指示器 -->
     <ProgressBar

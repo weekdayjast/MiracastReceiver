@@ -4,7 +4,6 @@
     <string name="waiting_connection">Ожидание подключения трансляции…</string>
     <string name="device_ip">IP устройства: %s</string>
     <string name="device_ip_fetching">Определение…</string>
-    <string name="connection_code_label">Код подключения</string>
     <string name="how_to_connect">Как подключиться</string>
     <string name="connect_instruction">1. Убедитесь, что передающее устройство и телевизор находятся в одной локальной сети\n2. Откройте приложение для трансляции на передающем устройстве\n3. Найдите и выберите это устройство\n4. Начните трансляцию</string>
     <string name="auto_start_on_boot">Запускать приёмник при включении</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">Качество</string>
     <string name="menu_speed">Скорость воспроизведения (%s)</string>
     <string name="menu_subtitles">Субтитры</string>
-    <string name="menu_orientation">Ориентация экрана</string>
     <string name="subtitles_auto">Субтитры переключаются автоматически по дорожкам субтитров медиафайла</string>
     <string name="quality_title">Выбор качества</string>
     <string name="quality_auto">Авто</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">Транслируемое изображение</string>
+    <string name="cd_rotate_screen">Повернуть экран</string>
     <string name="cd_previous">Предыдущий</string>
     <string name="cd_rewind">Перемотка назад</string>
     <string name="cd_play_pause">Воспроизведение/пауза</string>

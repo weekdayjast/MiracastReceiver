@@ -422,6 +422,8 @@ class CastReceiverService : Service() {
         servicesStarted = true
         // 启动 AirPlay 2 接收器
         airPlayReceiver.start()
+        // 播放页换渲染 Surface（手动旋转画面）时，让 AirPlay 投送的 URL 视频跟着换过去
+        com.weekd.miracastreceiver.ui.PlayerActivity.mirrorSurfaceListener = { airPlayReceiver.onVideoSurfaceChanged() }
 
         // 启动 DLNA/UPnP 服务
         upnpHttpServer.start()
@@ -467,6 +469,7 @@ class CastReceiverService : Service() {
         }
 
         // 停止 AirPlay 2 接收器
+        com.weekd.miracastreceiver.ui.PlayerActivity.mirrorSurfaceListener = null
         airPlayReceiver.stop()
 
         // 停止 DLNA/UPnP 服务

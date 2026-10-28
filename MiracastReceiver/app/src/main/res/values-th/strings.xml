@@ -4,7 +4,6 @@
     <string name="waiting_connection">กำลังรอการเชื่อมต่อแคสต์…</string>
     <string name="device_ip">IP ของอุปกรณ์: %s</string>
     <string name="device_ip_fetching">กำลังตรวจหา…</string>
-    <string name="connection_code_label">รหัสเชื่อมต่อ</string>
     <string name="how_to_connect">วิธีเชื่อมต่อ</string>
     <string name="connect_instruction">1. ตรวจสอบว่าอุปกรณ์ที่ส่งและทีวีอยู่ในเครือข่ายเดียวกัน\n2. เปิดแอปแคสต์บนอุปกรณ์ที่ส่ง\n3. ค้นหาและเลือกอุปกรณ์นี้\n4. เริ่มแคสต์</string>
     <string name="auto_start_on_boot">เริ่มบริการรับสัญญาณอัตโนมัติเมื่อเปิดเครื่อง</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">คุณภาพ</string>
     <string name="menu_speed">ความเร็วในการเล่น (%s)</string>
     <string name="menu_subtitles">คำบรรยาย</string>
-    <string name="menu_orientation">การวางแนวหน้าจอ</string>
     <string name="subtitles_auto">คำบรรยายจะสลับตามแทร็กคำบรรยายของสื่อโดยอัตโนมัติ</string>
     <string name="quality_title">เลือกคุณภาพ</string>
     <string name="quality_auto">อัตโนมัติ</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">รูปภาพที่แคสต์</string>
+    <string name="cd_rotate_screen">หมุนหน้าจอ</string>
     <string name="cd_previous">ก่อนหน้า</string>
     <string name="cd_rewind">ย้อนกลับ</string>
     <string name="cd_play_pause">เล่น/หยุดชั่วคราว</string>

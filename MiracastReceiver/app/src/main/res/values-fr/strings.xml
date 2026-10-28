@@ -4,7 +4,6 @@
     <string name="waiting_connection">En attente d\'une connexion de diffusion…</string>
     <string name="device_ip">IP de l\'appareil : %s</string>
     <string name="device_ip_fetching">Détection…</string>
-    <string name="connection_code_label">Code de connexion</string>
     <string name="how_to_connect">Comment se connecter</string>
     <string name="connect_instruction">1. Vérifiez que l\'appareil émetteur et le téléviseur sont sur le même réseau local\n2. Ouvrez l\'application de diffusion sur l\'appareil émetteur\n3. Recherchez et sélectionnez cet appareil\n4. Lancez la diffusion</string>
     <string name="auto_start_on_boot">Démarrer le récepteur au démarrage</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">Qualité</string>
     <string name="menu_speed">Vitesse de lecture (%s)</string>
     <string name="menu_subtitles">Sous-titres</string>
-    <string name="menu_orientation">Orientation de l\'écran</string>
     <string name="subtitles_auto">Les sous-titres suivent automatiquement les pistes de sous-titres du média</string>
     <string name="quality_title">Choisir la qualité</string>
     <string name="quality_auto">Auto</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">Image diffusée</string>
+    <string name="cd_rotate_screen">Faire pivoter l\'écran</string>
     <string name="cd_previous">Précédent</string>
     <string name="cd_rewind">Retour rapide</string>
     <string name="cd_play_pause">Lecture/Pause</string>

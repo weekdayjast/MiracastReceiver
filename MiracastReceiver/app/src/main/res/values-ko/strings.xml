@@ -4,7 +4,6 @@
     <string name="waiting_connection">캐스트 연결 대기 중…</string>
     <string name="device_ip">기기 IP: %s</string>
     <string name="device_ip_fetching">확인 중…</string>
-    <string name="connection_code_label">연결 코드</string>
     <string name="how_to_connect">연결 방법</string>
     <string name="connect_instruction">1. 보내는 기기와 TV가 같은 로컬 네트워크에 있는지 확인\n2. 보내는 기기에서 캐스트 앱 열기\n3. 이 기기를 검색하여 선택\n4. 캐스트 시작</string>
     <string name="auto_start_on_boot">부팅 시 수신 서비스 자동 시작</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">화질</string>
     <string name="menu_speed">재생 속도(%s)</string>
     <string name="menu_subtitles">자막</string>
-    <string name="menu_orientation">화면 방향</string>
     <string name="subtitles_auto">자막은 미디어의 자막 트랙에 따라 자동으로 전환됩니다</string>
     <string name="quality_title">화질 선택</string>
     <string name="quality_auto">자동</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">캐스트 이미지</string>
+    <string name="cd_rotate_screen">화면 회전</string>
     <string name="cd_previous">이전</string>
     <string name="cd_rewind">되감기</string>
     <string name="cd_play_pause">재생/일시정지</string>

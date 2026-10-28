@@ -7,12 +7,16 @@ import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.graphics.SurfaceTexture
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
 import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.View
+import android.widget.ImageButton
 import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -20,6 +24,8 @@ import android.widget.Toast
 import android.view.Surface
 import android.view.SurfaceHolder
 import android.view.SurfaceView
+import android.view.TextureView
+import android.widget.FrameLayout
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -81,7 +87,15 @@ class PlayerActivity : AppCompatActivity() {
 
         @Volatile
         var mirrorSurface: Surface? = null
-            private set
+            private set(value) {
+                if (field === value) return
+                field = value
+                mirrorSurfaceListener?.invoke()
+            }
+
+        /** 镜像 Surface 换了（手动旋转切换渲染视图）时通知 AirPlay 的 URL 视频播放器跟着换。 */
+        @Volatile
+        var mirrorSurfaceListener: (() -> Unit)? = null
 
         private const val IMAGE_SLIDE_INTERVAL_MS = 5_000L
         private const val QUALITY_AUTO = -1
@@ -92,6 +106,12 @@ class PlayerActivity : AppCompatActivity() {
         private val SEEK_STEP_TABLE_MS = longArrayOf(10_000L, 30_000L, 60_000L, 120_000L, 300_000L)
 
         private const val ACTION_PLAYBACK_STOPPED = "com.weekd.miracastreceiver.ACTION_PLAYBACK_STOPPED"
+
+        private const val ROTATE_BUTTON_HIDE_DELAY_MS = 4_000L
+        private val ROTATE_REVEAL_KEYS = setOf(
+            KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER,
+            KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN
+        )
     }
 
     private lateinit var playerView: PlayerView
@@ -117,6 +137,20 @@ class PlayerActivity : AppCompatActivity() {
     private var isMiracastSession = false
     private var isAirPlayMirrorSession = false
     private var mirrorAspectJob: Job? = null
+    private lateinit var btnRotateOverlay: ImageButton
+    private var rotateButtonHideJob: Job? = null
+
+    // 手动旋转画面：只转画面内容，不改屏幕方向，所以电视上也有效
+    /** 当前手动旋转角度（0/90/180/270，顺时针）。 */
+    private var rotationDegrees = 0
+    /** 镜像旋转用的 TextureView 层：0° 时隐藏，仍走 SurfaceView 保住电视上的性能。 */
+    private lateinit var mirrorRotateLayer: FrameLayout
+    private lateinit var mirrorRotateTexture: TextureView
+    private var mirrorHolderSurface: Surface? = null
+    private var mirrorTextureSurface: Surface? = null
+    /** 点播视频旋转用的 TextureView，挂在 PlayerView 的 overlay 层（画面之上、控制条之下）。 */
+    private var exoRotateLayer: FrameLayout? = null
+    private var exoRotateTexture: TextureView? = null
     private var currentSpeed = 1f
 
     // 视频流信息面板
@@ -198,6 +232,33 @@ class PlayerActivity : AppCompatActivity() {
         tvError = findViewById(R.id.tv_error)
         tvStreamInfo = findViewById(R.id.tv_stream_info)
         bufferingIndicator = findViewById(R.id.buffering_indicator)
+        btnRotateOverlay = findViewById(R.id.btn_rotate_overlay)
+        btnRotateOverlay.setOnClickListener {
+            rotateClockwise()
+            showRotateButton(focus = false)
+        }
+        mirrorRotateLayer = findViewById(R.id.mirror_rotate_layer)
+        mirrorRotateTexture = findViewById(R.id.mirror_rotate_texture)
+        mirrorRotateTexture.surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+            override fun onSurfaceTextureAvailable(st: SurfaceTexture, width: Int, height: Int) {
+                mirrorTextureSurface = Surface(st)
+                updateMirrorSurfaceTarget()
+                applyRotation()
+            }
+            override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, width: Int, height: Int) = applyRotation()
+            override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
+                val old = mirrorTextureSurface
+                mirrorTextureSurface = null
+                updateMirrorSurfaceTarget()
+                old?.release()
+                return true
+            }
+            override fun onSurfaceTextureUpdated(st: SurfaceTexture) = Unit
+        }
+        // 屏幕尺寸/方向变化后重新计算旋转后的缩放
+        findViewById<View>(android.R.id.content).addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or, ob ->
+            if (r - l != or - ol || b - t != ob - ot) applyRotation()
+        }
     }
 
     /**
@@ -272,6 +333,10 @@ class PlayerActivity : AppCompatActivity() {
                         }
                     }
 
+                    override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                        applyRotation()
+                    }
+
                     override fun onPlayerError(error: PlaybackException) {
                         Timber.e(error, "Player error")
                         updateBufferingState(false)
@@ -304,6 +369,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun setupControllerActions() {
         playerView.findViewById<View?>(R.id.btn_more)?.setOnClickListener { showMoreMenu() }
+        playerView.findViewById<View?>(R.id.btn_rotate)?.setOnClickListener { rotateClockwise() }
         playerView.findViewById<View?>(R.id.exo_ffwd)?.setOnClickListener { handleSeekPress(forward = true) }
         playerView.findViewById<View?>(R.id.exo_rew)?.setOnClickListener { handleSeekPress(forward = false) }
     }
@@ -315,7 +381,7 @@ class PlayerActivity : AppCompatActivity() {
             getString(R.string.menu_quality),
             getString(R.string.menu_speed, formatSpeedLabel(currentSpeed)),
             getString(R.string.menu_subtitles),
-            getString(R.string.menu_orientation)
+            getString(R.string.cd_rotate_screen)
         )
         isDialogShowing = true
         AlertDialog.Builder(this)
@@ -328,7 +394,7 @@ class PlayerActivity : AppCompatActivity() {
                         1 -> showQualityDialog()
                         2 -> showSpeedDialog()
                         3 -> Toast.makeText(this, R.string.subtitles_auto, Toast.LENGTH_SHORT).show()
-                        4 -> toggleOrientation()
+                        4 -> rotateClockwise()
                     }
                 }
             }
@@ -402,6 +468,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // 镜像/图片模式：遥控器按 OK 或上下键先呼出旋转按钮并给它焦点，再按 OK 就旋转
+        if (event.action == KeyEvent.ACTION_DOWN && !isDialogShowing && usesRotateOverlay() &&
+            event.keyCode in ROTATE_REVEAL_KEYS) {
+            val alreadyFocused = btnRotateOverlay.visibility == View.VISIBLE && btnRotateOverlay.isFocused
+            showRotateButton(focus = true)
+            if (!alreadyFocused) return true
+        }
         if (event.action == KeyEvent.ACTION_DOWN && !isDialogShowing) {
             // 镜像/Miracast 没有控制条，INFO / MENU 键是信息面板的唯一入口
             if (event.keyCode == KeyEvent.KEYCODE_INFO || event.keyCode == KeyEvent.KEYCODE_MENU) {
@@ -435,6 +508,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // 每次新的投屏请求都从 0° 开始
+        rotationDegrees = 0
         if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "MIRACAST") {
             startMiracastPlayback(intent.getIntExtra(EXTRA_RTP_PORT, 0), intent.getStringExtra(EXTRA_SESSION_ID))
             return
@@ -493,6 +568,8 @@ class PlayerActivity : AppCompatActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         publishMirrorSurface()
+        applyRotation()
+        showRotateButton(focus = false)
     }
 
     /**
@@ -511,7 +588,8 @@ class PlayerActivity : AppCompatActivity() {
         )
 
         fun publish(holder: SurfaceHolder) {
-            mirrorSurface = holder.surface.takeIf { it.isValid }
+            mirrorHolderSurface = holder.surface.takeIf { it.isValid }
+            updateMirrorSurfaceTarget()
             Timber.i("Mirror surface ${if (mirrorSurface == null) "not ready" else "ready"}")
             tvStatus.text = if (mirrorSurface == null) waitingText else activeText
         }
@@ -521,7 +599,8 @@ class PlayerActivity : AppCompatActivity() {
             override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) = publish(holder)
             override fun surfaceDestroyed(holder: SurfaceHolder) {
                 Timber.i("Mirror surface destroyed")
-                mirrorSurface = null
+                mirrorHolderSurface = null
+                updateMirrorSurfaceTarget()
             }
         })
         mirrorSurfaceView.post { publish(mirrorSurfaceView.holder) }
@@ -533,15 +612,25 @@ class PlayerActivity : AppCompatActivity() {
         mirrorAspectJob = lifecycleScope.launch {
             var lastW = 0
             var lastH = 0
+            var lastParentW = 0
+            var lastParentH = 0
             while (isActive) {
                 val videoW = StreamStats.videoWidth
                 val videoH = StreamStats.videoHeight
+                // 手动旋转后父视图宽高会对调，也要重新适配，否则画面仍按旋转前的框显示
+                val parent = mirrorSurfaceView.parent as? View
+                val parentW = parent?.width ?: 0
+                val parentH = parent?.height ?: 0
                 // 只有真正适配成功才记下尺寸：上一会话残留的尺寸会在布局完成前就读到，
                 // 此时父视图宽高为 0 无法适配，若提前记下就不再重试，画面会一直被拉伸铺满。
-                if (videoW > 0 && videoH > 0 && (videoW != lastW || videoH != lastH) &&
+                if (videoW > 0 && videoH > 0 &&
+                    (videoW != lastW || videoH != lastH || parentW != lastParentW || parentH != lastParentH) &&
                     fitMirrorSurface(videoW, videoH)) {
                     lastW = videoW
                     lastH = videoH
+                    lastParentW = parentW
+                    lastParentH = parentH
+                    applyRotation()
                 }
                 delay(300)
             }
@@ -601,6 +690,8 @@ class PlayerActivity : AppCompatActivity() {
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 
         publishMirrorSurface()
+        applyRotation()
+        showRotateButton(focus = false)
     }
 
     private fun playMedia(uri: String) {
@@ -612,6 +703,8 @@ class PlayerActivity : AppCompatActivity() {
         imageView.visibility = View.GONE
         playerView.visibility = View.VISIBLE
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        hideRotateButton()
+        applyRotation()
 
         try {
             tvError.visibility = View.GONE
@@ -664,6 +757,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun showImage(uri: String) {
         Timber.i("Showing image: $uri")
+        isMiracastSession = false
+        isAirPlayMirrorSession = false
         player?.pause()
         playerView.visibility = View.GONE
         imageView.visibility = View.VISIBLE
@@ -671,6 +766,8 @@ class PlayerActivity : AppCompatActivity() {
         tvStatus.text = getString(R.string.status_showing_image)
         updateBufferingState(true)
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
+        applyRotation()
+        showRotateButton(focus = false)
 
         lifecycleScope.launch {
             try {
@@ -685,6 +782,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (bitmap != null) {
                     imageView.setImageBitmap(bitmap)
                     adaptOrientationToImage(bitmap.width, bitmap.height)
+                    imageView.post { applyRotation() }
                     startImageSlideShow()
                 } else {
                     throw IllegalArgumentException(getString(R.string.error_image_decode))
@@ -927,12 +1025,173 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun toggleOrientation() {
-        requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
-        } else {
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    /**
+     * 手动把画面顺时针转 90°。每次都朝同一方向转，转满一圈回到 0°。
+     * 只旋转画面内容、不改屏幕方向，所以电视（忽略方向请求）上也有效。
+     */
+    private fun rotateClockwise() {
+        rotationDegrees = (rotationDegrees + 90) % 360
+        Timber.i("Manual rotation -> $rotationDegrees°")
+        applyRotation()
+    }
+
+    /** 按当前模式把 [rotationDegrees] 应用到画面上；尺寸变化时也会被反复调用，要保证幂等。 */
+    private fun applyRotation() {
+        when {
+            isMirrorSession() -> applyMirrorRotation()
+            isCurrentImage() -> applyImageRotation()
+            else -> applyExoRotation()
         }
+        // 离开的模式恢复原状，避免残留的变换带到下一个模式
+        if (!isMirrorSession()) setMirrorRotateLayerVisible(false)
+        if (!isCurrentImage() || isMirrorSession()) resetImageRotation()
+    }
+
+    private fun applyMirrorRotation() {
+        setMirrorRotateLayerVisible(rotationDegrees != 0)
+        if (rotationDegrees != 0) {
+            setTextureRotation(mirrorRotateTexture, StreamStats.videoWidth, StreamStats.videoHeight)
+        }
+    }
+
+    private fun setMirrorRotateLayerVisible(visible: Boolean) {
+        val target = if (visible) View.VISIBLE else View.GONE
+        if (mirrorRotateLayer.visibility != target) mirrorRotateLayer.visibility = target
+        updateMirrorSurfaceTarget()
+    }
+
+    /**
+     * 选出解码器该往哪块 Surface 送帧：旋转时用 TextureView（可以做变换），
+     * 0° 时用 SurfaceView（走硬件视频层，电视上 4K 也不卡）。解码器检测到 Surface
+     * 变化会原地切换输出（见 VideoDecoder.switchOutputSurface）。
+     */
+    private fun updateMirrorSurfaceTarget() {
+        // TextureView 第一次显示时 SurfaceTexture 要等一帧绘制才就绪。这段时间继续用 SurfaceView，
+        // 千万不能发布 null：解码器会当成 Surface 丢失而重建，重建后要等 iPhone 的下一个关键帧，
+        // 静止画面下可能一直黑屏。就绪后再原地切过去。
+        val useTexture = isMirrorSession() && rotationDegrees != 0 && mirrorTextureSurface != null
+        val target = if (useTexture) mirrorTextureSurface else mirrorHolderSurface
+        if (target !== mirrorSurface) {
+            Timber.i("Mirror render target -> ${if (useTexture) "TextureView" else "SurfaceView"} (${if (target == null) "not ready" else "ready"})")
+            mirrorSurface = target
+        }
+    }
+
+    private fun applyExoRotation() {
+        val currentPlayer = player ?: return
+        if (rotationDegrees == 0) {
+            if (exoRotateLayer?.visibility == View.VISIBLE) {
+                exoRotateLayer?.visibility = View.GONE
+                exoRotateTexture?.let { currentPlayer.clearVideoTextureView(it) }
+                (playerView.videoSurfaceView as? SurfaceView)?.let { currentPlayer.setVideoSurfaceView(it) }
+            }
+            return
+        }
+        val texture = exoRotateTexture ?: createExoRotateLayer() ?: return
+        if (exoRotateLayer?.visibility != View.VISIBLE) {
+            exoRotateLayer?.visibility = View.VISIBLE
+            currentPlayer.setVideoTextureView(texture)
+        }
+        val size = currentPlayer.videoSize
+        setTextureRotation(texture, (size.width * size.pixelWidthHeightRatio).toInt(), size.height)
+    }
+
+    /** 在 PlayerView 的 overlay 层（视频之上、控制条之下）放一块黑底 TextureView 承接旋转后的画面。 */
+    private fun createExoRotateLayer(): TextureView? {
+        val overlay = playerView.overlayFrameLayout ?: return null
+        val texture = TextureView(this)
+        val layer = FrameLayout(this).apply {
+            setBackgroundColor(android.graphics.Color.BLACK)
+            visibility = View.GONE
+            addView(texture, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        }
+        // 尺寸变化（转屏、首次布局）后重新算变换
+        texture.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> if (rotationDegrees != 0) applyRotation() }
+        overlay.addView(layer, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        exoRotateLayer = layer
+        exoRotateTexture = texture
+        return texture
+    }
+
+    /**
+     * TextureView 默认把画面拉伸铺满整个视图。这里先还原成视频本身的宽高、绕中心旋转，
+     * 再按旋转后的宽高等比缩放到能完整放进视图，效果等同 fitCenter + 旋转。
+     */
+    private fun setTextureRotation(texture: TextureView, videoW: Int, videoH: Int) {
+        val viewW = texture.width.toFloat()
+        val viewH = texture.height.toFloat()
+        if (viewW <= 0f || viewH <= 0f) return
+        val w = if (videoW > 0) videoW.toFloat() else viewW
+        val h = if (videoH > 0) videoH.toFloat() else viewH
+        val sideways = rotationDegrees % 180 != 0
+        val rotatedW = if (sideways) h else w
+        val rotatedH = if (sideways) w else h
+        val fit = minOf(viewW / rotatedW, viewH / rotatedH)
+        val matrix = Matrix().apply {
+            postScale(w / viewW, h / viewH)
+            postTranslate(-w / 2f, -h / 2f)
+            postRotate(rotationDegrees.toFloat())
+            postScale(fit, fit)
+            postTranslate(viewW / 2f, viewH / 2f)
+        }
+        texture.setTransform(matrix)
+        texture.invalidate()
+    }
+
+    /** 图片直接转 ImageView；转 90°/270° 时按旋转后的宽高重新等比缩放，保证完整显示。 */
+    private fun applyImageRotation() {
+        val drawable = imageView.drawable
+        val viewW = imageView.width.toFloat()
+        val viewH = imageView.height.toFloat()
+        var scale = 1f
+        if (drawable != null && viewW > 0f && viewH > 0f && rotationDegrees % 180 != 0) {
+            val iw = drawable.intrinsicWidth.toFloat()
+            val ih = drawable.intrinsicHeight.toFloat()
+            if (iw > 0f && ih > 0f) {
+                val fitNormal = minOf(viewW / iw, viewH / ih)
+                val fitRotated = minOf(viewW / ih, viewH / iw)
+                scale = fitRotated / fitNormal
+            }
+        }
+        imageView.rotation = rotationDegrees.toFloat()
+        imageView.scaleX = scale
+        imageView.scaleY = scale
+    }
+
+    private fun resetImageRotation() {
+        if (imageView.rotation != 0f || imageView.scaleX != 1f) {
+            imageView.rotation = 0f
+            imageView.scaleX = 1f
+            imageView.scaleY = 1f
+        }
+    }
+
+    private fun isMirrorSession() = isAirPlayMirrorSession || isMiracastSession
+
+    /** 镜像和图片没有控制条，用浮动按钮旋转；点播视频的旋转按钮在控制条里。 */
+    private fun usesRotateOverlay() = isMirrorSession() || isCurrentImage()
+
+    /** 呼出浮动旋转按钮，几秒无操作后自动隐藏。[focus] 为 true 时让遥控器焦点落在按钮上，按 OK 即可旋转。 */
+    private fun showRotateButton(focus: Boolean) {
+        if (!usesRotateOverlay()) return
+        btnRotateOverlay.visibility = View.VISIBLE
+        if (focus) btnRotateOverlay.requestFocus()
+        rotateButtonHideJob?.cancel()
+        rotateButtonHideJob = lifecycleScope.launch {
+            delay(ROTATE_BUTTON_HIDE_DELAY_MS)
+            btnRotateOverlay.visibility = View.GONE
+        }
+    }
+
+    private fun hideRotateButton() {
+        rotateButtonHideJob?.cancel()
+        btnRotateOverlay.visibility = View.GONE
+    }
+
+    // 镜像/图片模式没有控制条，点一下屏幕任意位置呼出旋转按钮
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) showRotateButton(focus = false)
+        return super.dispatchTouchEvent(ev)
     }
 
     private fun registerControlReceiver() {
@@ -1037,6 +1296,8 @@ class PlayerActivity : AppCompatActivity() {
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // RTP 接收器归 WfdServer 所有（会话结束时由它停止），这里不要碰
         mirrorSurface = null
+        mirrorTextureSurface?.release()
+        mirrorTextureSurface = null
         player?.release()
         player = null
         reportPlaybackStopped()

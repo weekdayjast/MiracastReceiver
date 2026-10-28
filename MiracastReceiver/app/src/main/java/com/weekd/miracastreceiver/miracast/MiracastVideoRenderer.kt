@@ -46,6 +46,13 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
             return
         }
 
+        // Surface 变了（手动旋转切换渲染视图）先尝试原地换输出，不用等关键帧
+        val current = decoder
+        if (current != null && surface !== configuredSurface && current.switchOutputSurface(surface)) {
+            Timber.i("Miracast: surface changed — switched decoder output in place")
+            configuredSurface = surface
+        }
+
         // Surface 变了（应用切后台再回前台会换新的）就重建解码器，否则画面会一直黑
         if (decoder == null || surface !== configuredSurface) {
             if (!rebuildDecoder(surface)) {

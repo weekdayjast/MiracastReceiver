@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   极简两行控制条：进度行 + 传输控制行。
-  画质/播放速度/字幕/屏幕方向/视频信息都收进「更多」弹窗（btn_more），
+  画质/播放速度/字幕/旋转画面/视频信息都收进「更多」弹窗（btn_more），
   避免 OSD 在电视上占掉近一半屏幕高度。
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
@@ -124,7 +124,20 @@
             android:src="@android:drawable/ic_menu_revert"
             android:tint="@color/text_primary" />
 
-        <!-- 更多：画质 / 速度 / 字幕 / 方向 / 视频信息 -->
+        <!-- 旋转画面：每按一次顺时针转 90° -->
+        <ImageButton
+            android:id="@+id/btn_rotate"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_margin="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/cd_rotate_screen"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_rotate"
+            android:tint="@color/text_primary" />
+
+        <!-- 更多：画质 / 速度 / 字幕 / 旋转 / 视频信息 -->
         <ImageButton
             android:id="@+id/btn_more"
             android:layout_width="40dp"

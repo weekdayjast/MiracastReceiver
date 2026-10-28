@@ -4,7 +4,6 @@
     <string name="waiting_connection">Esperando una conexión de transmisión…</string>
     <string name="device_ip">IP del dispositivo: %s</string>
     <string name="device_ip_fetching">Detectando…</string>
-    <string name="connection_code_label">Código de conexión</string>
     <string name="how_to_connect">Cómo conectarse</string>
     <string name="connect_instruction">1. Asegúrate de que el dispositivo emisor y el televisor estén en la misma red local\n2. Abre la app de transmisión en el dispositivo emisor\n3. Busca y selecciona este dispositivo\n4. Empieza a transmitir</string>
     <string name="auto_start_on_boot">Iniciar el receptor al encender</string>
@@ -61,7 +60,6 @@
     <string name="menu_quality">Calidad</string>
     <string name="menu_speed">Velocidad de reproducción (%s)</string>
     <string name="menu_subtitles">Subtítulos</string>
-    <string name="menu_orientation">Orientación de pantalla</string>
     <string name="subtitles_auto">Los subtítulos siguen automáticamente las pistas de subtítulos del contenido</string>
     <string name="quality_title">Seleccionar calidad</string>
     <string name="quality_auto">Automática</string>
@@ -82,6 +80,7 @@
 
     <!-- 控制条无障碍描述 -->
     <string name="cd_cast_image">Imagen transmitida</string>
+    <string name="cd_rotate_screen">Girar pantalla</string>
     <string name="cd_previous">Anterior</string>
     <string name="cd_rewind">Retroceder</string>
     <string name="cd_play_pause">Reproducir/Pausa</string>
