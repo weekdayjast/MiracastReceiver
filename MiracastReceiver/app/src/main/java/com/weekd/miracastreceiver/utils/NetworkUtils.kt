@@ -94,16 +94,6 @@ object NetworkUtils {
     }
 
     /**
-     * 生成随机连接码
-     */
-    fun generateConnectionCode(): String {
-        val chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        return (1..6)
-            .map { chars.random() }
-            .joinToString("")
-    }
-
-    /**
      * 获取设备 MAC 地址（用于 AirPlay）
      */
     fun getMacAddress(): String {

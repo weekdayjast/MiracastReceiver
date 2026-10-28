@@ -38,12 +38,9 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var tvDeviceName: TextView
     private lateinit var tvDeviceIp: TextView
-    private lateinit var tvConnectionCode: TextView
     private lateinit var tvStatus: TextView
     private lateinit var switchAutoStart: SwitchCompat
     private lateinit var tvLanguageValue: TextView
-
-    private var connectionCode: String = ""
 
     /** 定位权限弹窗还在时不叠加悬浮窗权限提示，等它有结果再说 */
     private var wifiPermissionPending = false
@@ -168,15 +165,11 @@ class MainActivity : AppCompatActivity() {
     private fun initServices() {
         deviceInfoProvider = DeviceInfoProvider(this)
         mdnsAdvertiser = MdnsAdvertiser(this)
-
-        // 生成连接码
-        connectionCode = NetworkUtils.generateConnectionCode()
     }
 
     private fun initViews() {
         tvDeviceName = findViewById(R.id.tv_device_name)
         tvDeviceIp = findViewById(R.id.tv_device_ip)
-        tvConnectionCode = findViewById(R.id.tv_connection_code)
         tvStatus = findViewById(R.id.tv_status)
         switchAutoStart = findViewById(R.id.switch_auto_start)
         tvLanguageValue = findViewById(R.id.tv_language_value)
@@ -195,9 +188,6 @@ class MainActivity : AppCompatActivity() {
         // 设置设备名称
         val deviceName = deviceInfoProvider.getDeviceName()
         tvDeviceName.text = deviceName
-
-        // 设置连接码（上方已有「连接码」标签，这里只显示码本身）
-        tvConnectionCode.text = connectionCode
     }
 
     /** 第一项是「跟随系统」，其后是 [AppLanguage.OPTIONS]。 */
@@ -272,7 +262,7 @@ class MainActivity : AppCompatActivity() {
         mdnsAdvertiser.startAdvertising(
             serviceName = deviceName,
             port = 8080,
-            deviceInfo = deviceInfo + ("code" to connectionCode)
+            deviceInfo = deviceInfo
         )
 
         Timber.i("Started AirPlay and Miracast advertising: $deviceName")
