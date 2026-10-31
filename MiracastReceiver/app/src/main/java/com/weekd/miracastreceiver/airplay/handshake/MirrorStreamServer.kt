@@ -15,13 +15,13 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * MirrorStreamServer — receives and decodes the AirPlay 2 mirroring video stream.
+ * MirrorStreamServer — receives and decodes AVC/HEVC AirPlay 2 mirroring video.
  *
  * macOS connects to [dataPort] and sends [128-byte header][payload] packets:
  *  - payload_size = little-endian int at header offset 0
  *  - payload_type = little-endian short at header offset 4, low byte
- *      • type 1: unencrypted avcC (SPS/PPS) → (re)configure the decoder
- *      • type 0: AES-CTR-encrypted H.264 (AVCC) → decrypt, convert to Annex-B, decode
+ *      • type 1: unencrypted avcC or hvc1/hvcC (VPS/SPS/PPS) → (re)configure the decoder
+ *      • type 0: AES-CTR-encrypted length-prefixed AVC/HEVC → decrypt, convert to Annex-B, decode
  *
  * Architecture: a network thread reads + decrypts packets (keeping the AES-CTR keystream strictly
  * ordered) and pushes work onto a bounded queue; a separate decoder thread consumes it. This way
@@ -40,7 +40,7 @@ class MirrorStreamServer(
     private val height: Int = 1080,
 ) {
     private sealed class Item
-    private class Config(val sps: ByteArray, val pps: ByteArray) : Item()
+    private class Config(val sps: ByteArray, val pps: ByteArray, val vps: ByteArray?, val frameWidth: Int, val frameHeight: Int) : Item()
     private class Frame(val annexB: ByteArray) : Item()
 
     private val cipher = MirrorCrypto.streamCipher(aesKey, ecdhSecret, streamConnectionId)
@@ -52,6 +52,9 @@ class MirrorStreamServer(
     @Volatile private var decoder: VideoDecoder? = null   // owned by the decoder thread
     private var lastSps: ByteArray? = null
     private var lastPps: ByteArray? = null
+    private var lastVps: ByteArray? = null
+    private var configWidth = width
+    private var configHeight = height
     // The Surface the current decoder was built against. The SurfaceView destroys its Surface when
     // the app backgrounds and creates a NEW one on return, so we watch for the identity changing
     // and rebuild the decoder — otherwise video stays black after foregrounding.
@@ -144,7 +147,9 @@ class MirrorStreamServer(
                         val annexB = MirrorCrypto.avccToAnnexB(cipher.update(payload))
                         if (annexB.isNotEmpty()) enqueue(Frame(annexB))
                     }
-                    1 -> parseConfig(payload)?.let { enqueue(it) }
+                    1 -> {
+                        parseConfig(payload, header)?.let { enqueue(it) }
+                    }
                     else -> Logger.v("Mirror: ignoring payload type $payloadType ($payloadSize B)")
                 }
             }
@@ -178,15 +183,15 @@ class MirrorStreamServer(
         }
     }
 
-    private fun parseConfig(payload: ByteArray): Config? = try {
-        val spsSize = ((payload[6].toInt() and 0xFF) shl 8) or (payload[7].toInt() and 0xFF)
-        val sps = payload.copyOfRange(8, 8 + spsSize)
-        val ppsLenOffset = 8 + spsSize + 1                   // skip the 1-byte PPS count
-        val ppsSize = ((payload[ppsLenOffset].toInt() and 0xFF) shl 8) or
-            (payload[ppsLenOffset + 1].toInt() and 0xFF)
-        Config(sps, payload.copyOfRange(ppsLenOffset + 2, ppsLenOffset + 2 + ppsSize))
+    private fun parseConfig(payload: ByteArray, header: ByteArray): Config? = try {
+        val parsed = AirPlayVideoConfigParser.parse(payload)
+        val w = Float.fromBits(leInt(header, 56))
+        val h = Float.fromBits(leInt(header, 60))
+        val valid = w.isFinite() && h.isFinite() && w in 128f..7680f && h in 128f..4320f
+        Logger.i("Mirror codec=${if (parsed.vps != null) "HEVC" else "AVC"} size=${if (valid) w.toInt() else width}x${if (valid) h.toInt() else height}")
+        Config(parsed.sps, parsed.pps, parsed.vps, if (valid) w.toInt() else width, if (valid) h.toInt() else height)
     } catch (e: Exception) {
-        Logger.e("Mirror: failed to parse SPS/PPS", e); null
+        Logger.e("Mirror: failed to parse video codec configuration", e); null
     }
 
     // ─── Decoder thread: consume the queue; the only thread that touches the decoder ──────────
@@ -197,11 +202,14 @@ class MirrorStreamServer(
                 val item = queue.poll(200, TimeUnit.MILLISECONDS) ?: continue
                 if (suspended) {
                     // URL video owns the Surface: keep the latest config for the resume, drop frames.
-                    if (item is Config) { lastSps = item.sps; lastPps = item.pps }
+                    if (item is Config) {
+                        lastSps = item.sps; lastPps = item.pps; lastVps = item.vps
+                        configWidth = item.frameWidth; configHeight = item.frameHeight
+                    }
                     continue
                 }
                 when (item) {
-                    is Config -> configureDecoder(item.sps, item.pps)
+                    is Config -> configureDecoder(item)
                     is Frame -> decodeFrame(item.annexB)
                 }
             }
@@ -221,14 +229,21 @@ class MirrorStreamServer(
         suspendLatch?.let { it.countDown(); suspendLatch = null }
     }
 
-    private fun configureDecoder(sps: ByteArray, pps: ByteArray) {
+    private fun configureDecoder(config: Config) {
+        val sps = config.sps
+        val pps = config.pps
         // New SPS/PPS (or first config) — cache it and (re)build against the current surface.
         val d = decoder
         val surface = awaitSurface()
-        if (d != null && d.isHealthy && sps.contentEquals(lastSps) && pps.contentEquals(lastPps) &&
+        val sameVps = config.vps?.contentEquals(lastVps) ?: (lastVps == null)
+        if (d != null && d.isHealthy && sps.contentEquals(lastSps) && pps.contentEquals(lastPps) && sameVps &&
+            configWidth == config.frameWidth && configHeight == config.frameHeight &&
             surface === configuredSurface) return
         lastSps = sps
         lastPps = pps
+        lastVps = config.vps
+        configWidth = config.frameWidth
+        configHeight = config.frameHeight
         clearGopCache()                    // 新配置（可能换了分辨率）之后旧帧不能再用
         rebuildDecoder(surface)
     }
@@ -248,9 +263,12 @@ class MirrorStreamServer(
         if (surface == null) return                            // backgrounded — wait for the surface to return
         if (!surface.isValid) return
         val sc = MirrorCrypto.START_CODE
-        decoder = VideoDecoder(surface).also { it.initialize(sc + sps, sc + pps, width, height) }
+        val mime = if (lastVps != null) "video/hevc" else "video/avc"
+        decoder = VideoDecoder(surface).also {
+            it.initialize(sc + sps, sc + pps, configWidth, configHeight, mime, lastVps?.let { vps -> sc + vps })
+        }
         awaitingKeyframe = true                                // a fresh decoder must start at an IDR
-        StreamStats.videoRes = "${width}x${height}"
+        StreamStats.videoRes = "${configWidth}x${configHeight}"
         Logger.i("Mirror decoder (re)built for surface (sps=${sps.size}B pps=${pps.size}B)")
     }
 
@@ -297,7 +315,7 @@ class MirrorStreamServer(
         val d = decoder ?: return                              // need surface + SPS/PPS first
         if (!d.isHealthy) {                                    // error state — drop, await next config
             Logger.w("Mirror: decoder unhealthy — dropping, awaiting new SPS/PPS")
-            d.release(); decoder = null; configuredSurface = null; lastSps = null; lastPps = null
+            d.release(); decoder = null; configuredSurface = null; lastSps = null; lastPps = null; lastVps = null
             return
         }
         if (awaitingKeyframe) {
@@ -325,18 +343,9 @@ class MirrorStreamServer(
         return true
     }
 
-    /** True if the Annex-B frame contains an IDR NAL unit (type 5) — a decodable resync point. */
+    /** The first VCL NAL must be AVC IDR or HEVC IRAP before decoding can resynchronize. */
     private fun isKeyframe(annexB: ByteArray): Boolean {
-        var i = 0
-        while (i + 3 < annexB.size) {
-            if (annexB[i].toInt() == 0 && annexB[i + 1].toInt() == 0 && annexB[i + 2].toInt() == 1) {
-                if ((annexB[i + 3].toInt() and 0x1F) == 5) return true   // IDR slice
-                i += 3
-            } else {
-                i++
-            }
-        }
-        return false
+        return AirPlayVideoConfigParser.containsRandomAccessFrame(annexB, lastVps != null)
     }
 
     /** The streaming Surface appears shortly after CONNECTED is emitted; poll briefly. */

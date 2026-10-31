@@ -1,6 +1,7 @@
 ﻿package com.weekd.miracastreceiver.airplay.handshake
 
 import android.content.Context
+import com.weekd.miracastreceiver.airplay.AirPlayCapabilities
 import com.weekd.miracastreceiver.util.NetworkUtils
 
 /**
@@ -25,7 +26,7 @@ object InfoResponder {
         val info = mapOf(
             "deviceID" to mac,
             "macAddress" to mac,
-            "features" to AIRPLAY_FEATURES,
+            "features" to AirPlayCapabilities.features,
             "statusFlags" to statusFlags,
             "model" to MODEL,
             "name" to NetworkUtils.getDeviceName(context),
@@ -59,7 +60,8 @@ object InfoResponder {
                     "widthPixels" to width.toLong(),
                     "heightPixels" to height.toLong(),
                     "rotation" to false,
-                    "refreshRate" to (1.0 / 60.0),
+                    "refreshRate" to (1.0 / AirPlayCapabilities.maxFps),
+                    "maxFPS" to AirPlayCapabilities.maxFps.toLong(),
                     "overscanned" to false,   // false = macOS uses the full advertised resolution
                     "features" to 14L
                 )
@@ -67,9 +69,6 @@ object InfoResponder {
         )
         return PlistCodec.encode(info)
     }
-
-    /** 64-bit features value; mirrors MdnsService's "0x5A7FFFF7,0x1E" (low,high 32-bit halves). */
-    private const val AIRPLAY_FEATURES = 0x1E5A7FFFF7L
 
     /** Matches RPiPlay's /info statusFlags (0x44). */
     private const val STATUS_FLAGS = 68L
