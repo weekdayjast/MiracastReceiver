@@ -20,6 +20,7 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.weekd.miracastreceiver.R
 import com.weekd.miracastreceiver.airplay.AirPlayCapabilities
+import com.weekd.miracastreceiver.airplay.fitMirrorResolution
 import com.weekd.miracastreceiver.airplay.AirPlayReceiver
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.dlna.DlnaMediaRenderer
@@ -122,7 +123,7 @@ class CastReceiverService : Service() {
         val mirrorResolution = if (AirPlayCapabilities.hardwareHevc4k) {
             displayResolution
         } else {
-            minOf(displayResolution.first, 1920) to minOf(displayResolution.second, 1080)
+            fitMirrorResolution(displayResolution.first, displayResolution.second, 1920, 1080)
         }
         val deviceName = DeviceInfoProvider(this).getDeviceName()
         Timber.i("AirPlay mirror advertised resolution: ${mirrorResolution.first}x${mirrorResolution.second}")

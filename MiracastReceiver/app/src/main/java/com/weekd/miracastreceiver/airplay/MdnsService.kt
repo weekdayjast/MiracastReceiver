@@ -304,11 +304,6 @@ class MdnsService(
         /** AirPlay RTSP port — [RtspHandler] must listen on this port. */
         const val AIRPLAY_PORT = 7000
 
-        /**
-         * AirPlay feature bitmask: advertise screen mirroring, video, and audio support.
-         * See TECHNICAL_SPEC.md §8 for the full bit-level breakdown.
-         */
-
         /** Pretend to be an Apple TV so macOS uses the screen mirroring protocol. */
         private const val AIRPLAY_MODEL = "AppleTV5,3"
 

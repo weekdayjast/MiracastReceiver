@@ -60,8 +60,8 @@ object InfoResponder {
                     "widthPixels" to width.toLong(),
                     "heightPixels" to height.toLong(),
                     "rotation" to false,
-                    "refreshRate" to (1.0 / AirPlayCapabilities.maxFps),
-                    "maxFPS" to AirPlayCapabilities.maxFps.toLong(),
+                    "refreshRate" to (1.0 / AirPlayCapabilities.maxFps(width, height)),
+                    "maxFPS" to AirPlayCapabilities.maxFps(width, height).toLong(),
                     "overscanned" to false,   // false = macOS uses the full advertised resolution
                     "features" to 14L
                 )

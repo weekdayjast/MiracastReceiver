@@ -150,8 +150,10 @@ class VideoDecoder(private val outputSurface: Surface) {
         }
 
         // Use the same HEVC decoder whose 4K capability was advertised to the sender.
-        val decoderName = if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) AirPlayCapabilities.hevcDecoderName else null
-        mediaCodec = if (decoderName != null) {
+        mediaCodec = if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) {
+            val decoderName = requireNotNull(AirPlayCapabilities.hevcDecoderName(actualWidth, actualHeight)) {
+                "No compatible HEVC hardware decoder"
+            }
             MediaCodec.createByCodecName(decoderName)
         } else {
             MediaCodec.createDecoderByType(mimeType)

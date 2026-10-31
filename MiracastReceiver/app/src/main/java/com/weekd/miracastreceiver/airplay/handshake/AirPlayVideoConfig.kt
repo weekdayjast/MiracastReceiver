@@ -1,6 +1,8 @@
 package com.weekd.miracastreceiver.airplay.handshake
 
-/** Parameter sets from either an avcC record or an HEVC hvc1/hvcC sample entry. */
+import java.io.ByteArrayOutputStream
+
+/** Annex-B SPS/PPS/VPS groups, retaining every parameter set of each type. */
 data class AirPlayVideoConfig(val sps: ByteArray, val pps: ByteArray, val vps: ByteArray? = null)
 
 object AirPlayVideoConfigParser {
@@ -58,14 +60,11 @@ object AirPlayVideoConfigParser {
         val cursor = Cursor(bytes, 5)
         val spsCount = cursor.byte() and 31
         require(spsCount > 0)
-        var sps: ByteArray? = null
-        repeat(spsCount) { val nal = cursor.nal(); if (sps == null) sps = nal }
+        val sps = List(spsCount) { cursor.nal().also { require((it[0].toInt() and 31) == 7) } }
         val ppsCount = cursor.byte()
         require(ppsCount > 0)
-        var pps: ByteArray? = null
-        repeat(ppsCount) { val nal = cursor.nal(); if (pps == null) pps = nal }
-        require((sps!![0].toInt() and 31) == 7 && (pps!![0].toInt() and 31) == 8)
-        return AirPlayVideoConfig(sps!!, pps!!)
+        val pps = List(ppsCount) { cursor.nal().also { require((it[0].toInt() and 31) == 8) } }
+        return AirPlayVideoConfig(annexB(sps), annexB(pps))
     }
 
     private fun parseHevc(bytes: ByteArray): AirPlayVideoConfig {
@@ -74,7 +73,7 @@ object AirPlayVideoConfigParser {
         val cursor = Cursor(bytes, 22)
         val arrays = cursor.byte()
         require(arrays in 1..64)
-        val sets = mutableMapOf<Int, ByteArray>()
+        val sets = mutableMapOf<Int, MutableList<ByteArray>>()
         repeat(arrays) {
             val type = cursor.byte() and 63
             val count = cursor.short()
@@ -82,14 +81,22 @@ object AirPlayVideoConfigParser {
             repeat(count) {
                 val nal = cursor.nal()
                 require(nal.size >= 2 && ((nal[0].toInt() and 0x7E) ushr 1) == type) { "HEVC NAL type mismatch" }
-                if (type in 32..34 && !sets.containsKey(type)) sets[type] = nal
+                if (type in 32..34) sets.getOrPut(type) { mutableListOf() }.add(nal)
             }
         }
         return AirPlayVideoConfig(
-            requireNotNull(sets[33]) { "Missing HEVC SPS" },
-            requireNotNull(sets[34]) { "Missing HEVC PPS" },
-            requireNotNull(sets[32]) { "Missing HEVC VPS" }
+            annexB(requireNotNull(sets[33]) { "Missing HEVC SPS" }),
+            annexB(requireNotNull(sets[34]) { "Missing HEVC PPS" }),
+            annexB(requireNotNull(sets[32]) { "Missing HEVC VPS" })
         )
+    }
+
+    private fun annexB(nals: List<ByteArray>): ByteArray = ByteArrayOutputStream().use { output ->
+        for (nal in nals) {
+            output.write(byteArrayOf(0, 0, 0, 1))
+            output.write(nal)
+        }
+        output.toByteArray()
     }
 
     fun containsRandomAccessFrame(bytes: ByteArray, hevc: Boolean): Boolean {

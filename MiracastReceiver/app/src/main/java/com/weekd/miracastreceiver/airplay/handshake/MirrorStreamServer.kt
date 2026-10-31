@@ -262,10 +262,9 @@ class MirrorStreamServer(
         val pps = lastPps ?: return
         if (surface == null) return                            // backgrounded — wait for the surface to return
         if (!surface.isValid) return
-        val sc = MirrorCrypto.START_CODE
         val mime = if (lastVps != null) "video/hevc" else "video/avc"
         decoder = VideoDecoder(surface).also {
-            it.initialize(sc + sps, sc + pps, configWidth, configHeight, mime, lastVps?.let { vps -> sc + vps })
+            it.initialize(sps, pps, configWidth, configHeight, mime, lastVps)
         }
         awaitingKeyframe = true                                // a fresh decoder must start at an IDR
         StreamStats.videoRes = "${configWidth}x${configHeight}"
