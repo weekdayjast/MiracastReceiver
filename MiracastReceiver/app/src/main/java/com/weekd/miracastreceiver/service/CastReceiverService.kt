@@ -19,6 +19,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.weekd.miracastreceiver.R
+import com.weekd.miracastreceiver.airplay.AirPlayCapabilities
+import com.weekd.miracastreceiver.airplay.fitMirrorResolution
 import com.weekd.miracastreceiver.airplay.AirPlayReceiver
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.dlna.DlnaMediaRenderer
@@ -115,7 +117,14 @@ class CastReceiverService : Service() {
         // 初始化设备 UUID
         deviceUuid = generateDeviceUuid()
 
-        val mirrorResolution = getBestDisplayResolution()
+        // A 4K display alone is insufficient: macOS may choose HEVC even when the
+        // receiver has only advertised AVC. Keep AVC-only hardware within 1080p.
+        val displayResolution = getBestDisplayResolution()
+        val mirrorResolution = if (AirPlayCapabilities.hardwareHevc4k) {
+            displayResolution
+        } else {
+            fitMirrorResolution(displayResolution.first, displayResolution.second, 1920, 1080)
+        }
         val deviceName = DeviceInfoProvider(this).getDeviceName()
         Timber.i("AirPlay mirror advertised resolution: ${mirrorResolution.first}x${mirrorResolution.second}")
 

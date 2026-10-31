@@ -7,10 +7,10 @@ import android.view.Surface
 import com.weekd.miracastreceiver.util.Logger
 
 /**
- * VideoDecoder — Hardware H.264 video decoder using Android's MediaCodec API.
+ * VideoDecoder — Hardware AVC/HEVC video decoder using Android's MediaCodec API.
  *
- * WHY: AirPlay screen mirroring sends video as a stream of H.264-encoded frames.
- * To display these frames on screen, we need to decode the H.264 bitstream.
+ * WHY: AirPlay screen mirroring can send AVC or HEVC frames, depending on negotiated capabilities.
+ * To display these frames on screen, we need to decode the negotiated bitstream.
  * MediaCodec is Android's API to the hardware video decoder (GPU), which is
  * much faster and more power-efficient than any software decoder.
  *
@@ -82,8 +82,17 @@ class VideoDecoder(private val outputSurface: Surface) {
      * @param ppsBytes  The PPS NAL unit bytes (from SDP "sprop-parameter-sets" field)
      * @param width     Video width in pixels (from SDP)
      * @param height    Video height in pixels (from SDP)
+     * @param mimeType  AVC by default; HEVC for a negotiated hvcC configuration
+     * @param vpsBytes  Annex-B VPS required by HEVC; SPS/PPS are also Annex-B
      */
-    fun initialize(spsBytes: ByteArray, ppsBytes: ByteArray, width: Int, height: Int) {
+    fun initialize(
+        spsBytes: ByteArray,
+        ppsBytes: ByteArray,
+        width: Int,
+        height: Int,
+        mimeType: String = MediaFormat.MIMETYPE_VIDEO_AVC,
+        vpsBytes: ByteArray? = null
+    ) {
         if (isInitialized) {
             Logger.w("VideoDecoder.initialize() called twice — ignoring second call")
             return
@@ -94,30 +103,39 @@ class VideoDecoder(private val outputSurface: Surface) {
         // MediaCodec with that wedges the decoder (no input buffers, no frames). The hardware
         // decoder reads the true size from the SPS (csd-0) itself and reports it via
         // INFO_OUTPUT_FORMAT_CHANGED, which we use to refine the size for aspect-fit.
-        val parsed = Companion.parseSpsResolution(spsBytes)
-        val (actualWidth, actualHeight) = parsed?.takeIf { isPlausibleSize(it.first, it.second) } ?: run {
-            Logger.w("SPS resolution $parsed implausible/failed — using hint ${width}x${height}")
-            Pair(width, height)
+        val parsed = if (mimeType == MediaFormat.MIMETYPE_VIDEO_AVC) parseSpsResolution(spsBytes) else null
+        val (actualWidth, actualHeight) = when {
+            mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC -> Pair(width, height)
+            parsed != null && isPlausibleSize(parsed.first, parsed.second) -> parsed
+            else -> {
+                Logger.w("SPS resolution $parsed implausible/failed — using hint ${width}x${height}")
+                Pair(width, height)
+            }
         }
 
-        Logger.i("Initializing H.264 decoder: ${actualWidth}x${actualHeight} " +
+        Logger.i("Initializing $mimeType decoder: ${actualWidth}x${actualHeight} " +
                  "(hint was ${width}x${height})")
 
         // Provisional size for StreamingScreen aspect-fit; replaced by the decoder's reported size.
         StreamStats.videoWidth = actualWidth
         StreamStats.videoHeight = actualHeight
-        StreamStats.videoCodec = MediaFormat.MIMETYPE_VIDEO_AVC
+        StreamStats.videoCodec = mimeType
 
-        // Create the MediaFormat that describes the H.264 stream to the hardware decoder
+        // Describe the negotiated stream to the hardware decoder.
         val format = MediaFormat.createVideoFormat(
-            MediaFormat.MIMETYPE_VIDEO_AVC,  // AVC = Advanced Video Coding = H.264
+            mimeType,
             actualWidth,
             actualHeight
         ).apply {
             // Provide SPS and PPS so MediaCodec can configure the hardware decoder.
             // These are wrapped in ByteBuffers as required by the MediaCodec API.
-            setByteBuffer("csd-0", java.nio.ByteBuffer.wrap(spsBytes))  // SPS
-            setByteBuffer("csd-1", java.nio.ByteBuffer.wrap(ppsBytes))  // PPS
+            if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) {
+                require(vpsBytes != null) { "HEVC requires VPS" }
+                setByteBuffer("csd-0", java.nio.ByteBuffer.wrap(vpsBytes + spsBytes + ppsBytes))
+            } else {
+                setByteBuffer("csd-0", java.nio.ByteBuffer.wrap(spsBytes))
+                setByteBuffer("csd-1", java.nio.ByteBuffer.wrap(ppsBytes))
+            }
             // NOTE: do NOT set KEY_MAX_WIDTH/HEIGHT here — this SoC's MStar decoder rejects
             // adaptive playback (BadParameter / buffer-count failures) and produces banding.
             // Resolution changes are handled by recreating the decoder in MirrorStreamServer.
@@ -131,10 +149,15 @@ class VideoDecoder(private val outputSurface: Surface) {
             setInteger(MediaFormat.KEY_PRIORITY, 0)            // 0 = 实时任务
         }
 
-        // Create the hardware H.264 decoder.
-        // "video/avc" is the MIME type for H.264. Android will pick the best
-        // available hardware decoder for this format.
-        mediaCodec = MediaCodec.createDecoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+        // Use the same HEVC decoder whose 4K capability was advertised to the sender.
+        mediaCodec = if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) {
+            val decoderName = requireNotNull(AirPlayCapabilities.hevcDecoderName(actualWidth, actualHeight)) {
+                "No compatible HEVC hardware decoder"
+            }
+            MediaCodec.createByCodecName(decoderName)
+        } else {
+            MediaCodec.createDecoderByType(mimeType)
+        }
 
         // Configure the decoder:
         // - format: what the input will look like (H.264, width, height, SPS/PPS)
@@ -146,7 +169,7 @@ class VideoDecoder(private val outputSurface: Surface) {
 
         isInitialized = true
         startOutputThread()
-        Logger.i("H.264 decoder initialized successfully")
+        Logger.i("$mimeType decoder initialized successfully")
     }
 
     /** 启动输出线程：阻塞等待解码完成的帧并立即送显。 */
