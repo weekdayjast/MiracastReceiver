@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 默认语言（英文）。其他语言见 values-zh、values-zh-rTW 等目录，新增条目时要同步补齐。 -->
 <resources>
+    <string name="auto_rotate_to_fit">Auto-rotate to fit screen</string>
     <string name="app_name" translatable="false">Miracast Receiver</string>
 
     <!-- 首页 -->

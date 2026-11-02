@@ -252,14 +252,15 @@ class WifiDirectManager(
                 }
             })
 
-            // 开始服务发现
-            manager?.discoverServices(ch, object : WifiP2pManager.ActionListener {
+            // Miracast 依赖 P2P 设备发现与 WFD IE；discoverServices 没有
+            // addServiceRequest 时会以 NO_SERVICE_REQUESTS 失败，无法启动发现。
+            manager?.discoverPeers(ch, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
-                    Timber.i("Service discovery started")
+                    Timber.i("Miracast peer discovery started")
                 }
 
                 override fun onFailure(reason: Int) {
-                    Timber.e("Failed to start service discovery: $reason")
+                    Timber.e("Failed to start Miracast peer discovery: $reason")
                 }
             })
         } catch (e: SecurityException) {

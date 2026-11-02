@@ -173,6 +173,10 @@ class MainActivity : AppCompatActivity() {
         tvDeviceIp = findViewById(R.id.tv_device_ip)
         tvStatus = findViewById(R.id.tv_status)
         switchAutoStart = findViewById(R.id.switch_auto_start)
+        findViewById<SwitchCompat>(R.id.switch_auto_rotate).apply {
+            isChecked = AppSettings.isAutoRotateToFit(this@MainActivity)
+            setOnCheckedChangeListener { _, checked -> AppSettings.setAutoRotateToFit(this@MainActivity, checked) }
+        }
         switchReturnToApp = findViewById(R.id.switch_return_to_app)
         tvLanguageValue = findViewById(R.id.tv_language_value)
 

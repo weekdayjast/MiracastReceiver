@@ -9,6 +9,11 @@ import android.content.Context
  * 内部用的 prefs 文件分开，避免清配对时误删用户设置。
  */
 object AppSettings {
+    fun isAutoRotateToFit(context: Context): Boolean = prefs(context).getBoolean("auto_rotate_to_fit", false)
+
+    fun setAutoRotateToFit(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("auto_rotate_to_fit", enabled).apply()
+    }
 
     private const val PREFS_NAME = "miracast_settings"
     private const val KEY_AUTO_START_ON_BOOT = "auto_start_on_boot"

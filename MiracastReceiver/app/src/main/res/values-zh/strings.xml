@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">自动旋转适配屏幕</string>
     <!-- 首页 -->
     <string name="waiting_connection">等待投屏连接...</string>
     <string name="device_ip">设备 IP: %s</string>
