@@ -1308,14 +1308,15 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * 退出播放界面的统一出口。遥控器返回键和手机端「停止投屏」都走这里。
      *
-     * 默认只 finish：这一页关掉，任务空了系统自然回落到桌面。
-     * 打开「投屏结束后回到本应用」时，先把设置页压到栈上再 finish —— 播放页在它上面
-     * 销毁后，停下的就是设置页，方便接着调设置或确认接收状态。两条路径都不留空任务：
-     * finish 的是任务里的最后一个 Activity，任务随之从最近任务里消失。
+     * 开启「投屏结束后回到本应用」时，清除已有首页上方的页面并复用首页实例；
+     * 任务栈中没有首页时才新建，避免反复投屏后累积首页及其广播和状态更新任务。
+     * 关闭时只结束播放页，由系统恢复任务栈中的上一页。
      */
     private fun exitPlayer() {
         if (AppSettings.isReturnToAppAfterCast(this)) {
-            startActivity(Intent(this, MainActivity::class.java))
+            startActivity(Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            })
         }
         finish()
     }
