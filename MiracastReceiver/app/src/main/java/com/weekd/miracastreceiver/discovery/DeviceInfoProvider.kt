@@ -43,7 +43,7 @@ class DeviceInfoProvider(private val context: Context) {
             "manufacturer" to Build.MANUFACTURER,
             "android_version" to Build.VERSION.RELEASE,
             "sdk" to Build.VERSION.SDK_INT.toString(),
-            "ip" to (NetworkUtils.getLocalIpAddress() ?: "unknown"),
+            "ip" to (NetworkUtils.getLocalIpAddress(context) ?: "unknown"),
             "h264" to CodecUtils.isVideoDecoderSupported(CodecUtils.MIME_VIDEO_H264).toString(),
             "h265" to CodecUtils.isVideoDecoderSupported(CodecUtils.MIME_VIDEO_H265).toString(),
             "recommended_codec" to videoConfig.mimeType,
