@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. Vérifiez que l\'appareil émetteur et le téléviseur sont sur le même réseau local\n2. Ouvrez l\'application de diffusion sur l\'appareil émetteur\n3. Recherchez et sélectionnez cet appareil\n4. Lancez la diffusion</string>
     <string name="auto_start_on_boot">Démarrer le récepteur au démarrage</string>
     <string name="auto_start_on_boot_hint">Fonctionne en arrière-plan dès l\'allumage du téléviseur, sans ouvrir l\'application. Sur certains téléviseurs, il faut autoriser le démarrage automatique de cette application dans les paramètres système.</string>
+    <string name="return_to_app_after_cast">Revenir à cette application après la diffusion</string>
+    <string name="return_to_app_after_cast_hint">À l\'arrêt de la diffusion, reste sur cet écran de réglages au lieu de revenir à l\'écran d\'accueil du téléviseur. Pratique pour modifier les réglages juste après.</string>
     <string name="language">Langue</string>
     <string name="language_follow_system">Langue du système</string>
     <string name="status_no_network">Aucune connexion réseau</string>

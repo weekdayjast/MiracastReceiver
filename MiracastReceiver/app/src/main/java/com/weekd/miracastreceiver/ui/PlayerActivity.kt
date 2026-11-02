@@ -43,6 +43,7 @@ import androidx.media3.ui.PlayerView
 import com.weekd.miracastreceiver.R
 import com.weekd.miracastreceiver.airplay.StreamStats
 import com.weekd.miracastreceiver.miracast.RtpReceiver
+import com.weekd.miracastreceiver.util.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -175,7 +176,7 @@ class PlayerActivity : AppCompatActivity() {
                 ACTION_PAUSE -> if (isCurrentImage()) stopImageSlideShow() else player?.pause()
                 ACTION_STOP -> {
                     stopPlayback()
-                    finish()
+                    exitPlayer()
                 }
                 ACTION_SEEK -> {
                     val position = intent.getLongExtra(EXTRA_SEEK_POSITION, 0L)
@@ -1304,9 +1305,24 @@ class PlayerActivity : AppCompatActivity() {
         Timber.i("PlayerActivity destroyed")
     }
 
+    /**
+     * 退出播放界面的统一出口。遥控器返回键和手机端「停止投屏」都走这里。
+     *
+     * 默认只 finish：这一页关掉，任务空了系统自然回落到桌面。
+     * 打开「投屏结束后回到本应用」时，先把设置页压到栈上再 finish —— 播放页在它上面
+     * 销毁后，停下的就是设置页，方便接着调设置或确认接收状态。两条路径都不留空任务：
+     * finish 的是任务里的最后一个 Activity，任务随之从最近任务里消失。
+     */
+    private fun exitPlayer() {
+        if (AppSettings.isReturnToAppAfterCast(this)) {
+            startActivity(Intent(this, MainActivity::class.java))
+        }
+        finish()
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         stopPlayback()
-        super.onBackPressed()
+        exitPlayer()
     }
 }
