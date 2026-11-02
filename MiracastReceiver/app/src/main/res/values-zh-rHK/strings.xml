@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 繁体中文。values-zh-rHK 是本文件的副本，修改时两边一起改。 -->
 <resources>
+    <string name="auto_rotate_to_fit">自動旋轉以配合螢幕</string>
     <!-- 首页 -->
     <string name="waiting_connection">等待投影連線...</string>
     <string name="device_ip">裝置 IP: %s</string>

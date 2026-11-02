@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">स्क्रीन के अनुसार अपने आप घुमाएँ</string>
+    <string name="notification_stop_cast">कास्टिंग बंद करें</string>
     <!-- 首页 -->
     <string name="waiting_connection">कास्ट कनेक्शन की प्रतीक्षा की जा रही है…</string>
     <string name="device_ip">डिवाइस IP: %s</string>

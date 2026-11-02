@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">画面に合わせて自動回転</string>
+    <string name="notification_stop_cast">キャストを停止</string>
     <!-- 首页 -->
     <string name="waiting_connection">キャスト接続を待機中…</string>
     <string name="device_ip">デバイス IP: %s</string>

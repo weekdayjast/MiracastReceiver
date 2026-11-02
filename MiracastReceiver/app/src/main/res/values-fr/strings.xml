@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">Rotation automatique adaptée à l\'écran</string>
+    <string name="notification_stop_cast">Arrêter la diffusion</string>
     <!-- 首页 -->
     <string name="waiting_connection">En attente d\'une connexion de diffusion…</string>
     <string name="device_ip">IP de l\'appareil : %s</string>

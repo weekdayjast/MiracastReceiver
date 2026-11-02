@@ -388,3 +388,17 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 ## ⭐ Star History
 
 If you find this project helpful, please give it a star!
+
+## 🙏 贡献者感谢 / Contributors
+
+感谢以下贡献者为项目贡献代码、功能改进和设备验证，也感谢所有提交问题、提供日志和参与测试的朋友。
+
+Thanks to the following contributors for their code, improvements, and device testing, and to everyone who reports issues, shares logs, and helps test the app.
+
+| 贡献者 / Contributor | 贡献 / Contributions |
+| --- | --- |
+| [@weekdayjast](https://github.com/weekdayjast) | 项目创建与维护、投屏协议实现 / Project creation, maintenance, and casting protocols |
+| [@arjuntam](https://github.com/arjuntam) | 横屏双栏布局、投屏退出行为设置及设备验证（[#28](https://github.com/weekdayjast/MiracastReceiver/pull/28)、[#29](https://github.com/weekdayjast/MiracastReceiver/pull/29)） / Landscape layout, configurable exit behavior, and device testing |
+| [@Googler0825](https://github.com/Googler0825) | 4K AirPlay HEVC 协商、解码与设备验证（[#26](https://github.com/weekdayjast/MiracastReceiver/pull/26)） / 4K AirPlay HEVC negotiation, decoding, and device testing |
+
+[查看完整贡献者名单 / View all contributors](https://github.com/weekdayjast/MiracastReceiver/graphs/contributors)

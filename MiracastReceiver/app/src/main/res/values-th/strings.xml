@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">หมุนอัตโนมัติให้พอดีหน้าจอ</string>
+    <string name="notification_stop_cast">หยุดแคสต์</string>
     <!-- 首页 -->
     <string name="waiting_connection">กำลังรอการเชื่อมต่อแคสต์…</string>
     <string name="device_ip">IP ของอุปกรณ์: %s</string>

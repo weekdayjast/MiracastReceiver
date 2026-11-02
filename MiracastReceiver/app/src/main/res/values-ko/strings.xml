@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="auto_rotate_to_fit">화면에 맞춰 자동 회전</string>
+    <string name="notification_stop_cast">캐스팅 중지</string>
     <!-- 首页 -->
     <string name="waiting_connection">캐스트 연결 대기 중…</string>
     <string name="device_ip">기기 IP: %s</string>
