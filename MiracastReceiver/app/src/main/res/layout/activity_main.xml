@@ -112,6 +112,36 @@
                 android:textSize="12sp" />
         </LinearLayout>
 
+        <!-- 设置：投屏结束后去哪 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:addStatesFromChildren="true"
+            android:background="@drawable/bg_setting_item"
+            android:orientation="vertical"
+            android:padding="14dp">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_return_to_app"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:text="@string/return_to_app_after_cast"
+                android:textColor="@color/text_primary"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:lineSpacingExtra="2dp"
+                android:text="@string/return_to_app_after_cast_hint"
+                android:textColor="@color/text_secondary"
+                android:textSize="12sp" />
+        </LinearLayout>
+
         <!-- 设置：界面语言 -->
         <LinearLayout
             android:id="@+id/setting_language"

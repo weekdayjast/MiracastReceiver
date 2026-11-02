@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. 送信側デバイスとテレビが同じローカルネットワークにあることを確認\n2. 送信側でキャスト用アプリを開く\n3. このデバイスを検索して選択\n4. キャストを開始</string>
     <string name="auto_start_on_boot">起動時に受信サービスを自動開始</string>
     <string name="auto_start_on_boot_hint">テレビの電源を入れるとバックグラウンドで自動的に動作し、このアプリを開く必要はありません。一部のテレビでは、システム設定でこのアプリの自動起動を許可する必要があります。</string>
+    <string name="return_to_app_after_cast">キャスト終了後もこのアプリに戻る</string>
+    <string name="return_to_app_after_cast_hint">キャストを停止したあと、テレビのホーム画面ではなくこの設定画面に戻ります。続けて設定を変えたいときに便利です。</string>
     <string name="language">言語</string>
     <string name="language_follow_system">システムに従う</string>
     <string name="status_no_network">ネットワークに接続されていません</string>

@@ -13,6 +13,7 @@ object AppSettings {
     private const val PREFS_NAME = "miracast_settings"
     private const val KEY_AUTO_START_ON_BOOT = "auto_start_on_boot"
     private const val KEY_LANGUAGE = "language"
+    private const val KEY_RETURN_TO_APP_AFTER_CAST = "return_to_app_after_cast"
 
     /**
      * 是否开机自动启动接收服务。
@@ -33,6 +34,19 @@ object AppSettings {
 
     fun setLanguageTag(context: Context, tag: String) {
         prefs(context).edit().putString(KEY_LANGUAGE, tag).apply()
+    }
+
+    /**
+     * 投屏结束（遥控器返回键 / 手机端停止）后，是否留在本应用的设置页。
+     *
+     * 默认关闭：退出投屏就回到电视桌面，这是多数人投完屏想继续看电视的路径。
+     * 打开后停在设置页，适合需要接着调设置（自启、语言）或确认接收状态的人。
+     */
+    fun isReturnToAppAfterCast(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_RETURN_TO_APP_AFTER_CAST, false)
+
+    fun setReturnToAppAfterCast(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_RETURN_TO_APP_AFTER_CAST, enabled).apply()
     }
 
     private fun prefs(context: Context) =

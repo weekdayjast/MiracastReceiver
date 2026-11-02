@@ -9,6 +9,8 @@
     <string name="connect_instruction">1. 確認傳送裝置與電視位於同一區域網路\n2. 開啟傳送端應用程式\n3. 搜尋並選擇此裝置\n4. 開始投影</string>
     <string name="auto_start_on_boot">開機自動啟動接收服務</string>
     <string name="auto_start_on_boot_hint">電視開機後在背景自動執行，無需手動開啟本應用程式。部分電視需要在系統設定中允許本應用程式自動啟動。</string>
+    <string name="return_to_app_after_cast">投屏結束後回到本應用</string>
+    <string name="return_to_app_after_cast_hint">停止投屏後停在設定頁，而不是回到電視桌面。適合投完螢幕就要接著調整設定的情況。</string>
     <string name="language">語言</string>
     <string name="language_follow_system">跟隨系統</string>
     <string name="status_no_network">網路未連線</string>
