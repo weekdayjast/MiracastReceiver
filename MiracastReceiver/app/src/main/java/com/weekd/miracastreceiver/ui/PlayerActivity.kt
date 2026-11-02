@@ -101,7 +101,7 @@ class PlayerActivity : AppCompatActivity() {
                 mirrorSurfaceListener?.invoke()
             }
 
-        /** 镜像 Surface 换了（手动旋转切换渲染视图）时通知 AirPlay 的 URL 视频播放器跟着换。 */
+        /** Surface 重建时通知 AirPlay 的 URL 视频播放器与镜像解码器恢复输出。 */
         @Volatile
         var mirrorSurfaceListener: (() -> Unit)? = null
 
@@ -534,6 +534,17 @@ class PlayerActivity : AppCompatActivity() {
         miracastContent = RectF(0f, 0f, 1f, 1f)
         cropCandidate = null
         cropConfirmations = 0
+        lastCropSampleAt = 0L
+        // Activity 可被新投屏请求复用；清角度之外还要清掉旧 TextureView 变换和输出目标。
+        mirrorRotateTexture.setTransform(Matrix())
+        mirrorRotateLayer.visibility = View.GONE
+        exoRotateTexture?.setTransform(Matrix())
+        exoRotateTexture?.let { player?.clearVideoTextureView(it) }
+        exoRotateLayer?.visibility = View.GONE
+        playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+        (playerView.videoSurfaceView as? SurfaceView)?.let { player?.setVideoSurfaceView(it) }
+        resetImageRotation()
+        updateMirrorSurfaceTarget()
         if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "MIRACAST") {
             startMiracastPlayback(intent.getIntExtra(EXTRA_RTP_PORT, 0), intent.getStringExtra(EXTRA_SESSION_ID))
             return
@@ -1401,6 +1412,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        cropSession++ // 丢弃退出前尚未返回的取帧结果。
         super.onDestroy()
         try {
             unregisterReceiver(controlReceiver)
@@ -1450,6 +1462,12 @@ class PlayerActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
+        if (isMirrorSession()) {
+            sendBroadcast(Intent("com.weekd.miracastreceiver.DISCONNECT_SENDER").apply {
+                setPackage(packageName)
+                putExtra("miracast", isMiracastSession)
+            })
+        }
         stopPlayback()
         exitPlayer()
     }

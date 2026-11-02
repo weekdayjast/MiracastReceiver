@@ -97,4 +97,5 @@
     <string name="notification_channel_name">Cast receiver service</string>
     <string name="notification_channel_description">Keeps the cast receiver service running</string>
     <string name="notification_waiting">Waiting for AirPlay / DLNA / Miracast connections</string>
+    <string name="notification_stop_cast">Stop casting</string>
 </resources>

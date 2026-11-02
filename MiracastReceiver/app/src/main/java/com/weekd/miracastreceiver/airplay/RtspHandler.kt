@@ -175,6 +175,12 @@ open class RtspHandler(
         Logger.i("RTSP handler stopped")
     }
 
+    /** Close only the sender connection; keep the listening socket available. */
+    fun disconnectSender() {
+        runCatching { activeClient?.close() }
+        synchronized(reverseLock) { runCatching { reverseSocket?.close() }; reverseSocket = null }
+    }
+
     /**
      * Binds the RTSP port with SO_REUSEADDR, retrying briefly if a just-stopped instance hasn't
      * released it yet. A quick service stop→start (the activity being destroyed and relaunched)
@@ -620,7 +626,7 @@ open class RtspHandler(
     /** GET /server-info — legacy XML plist of receiver identity for AirPlay video senders. */
     private fun handleServerInfo(request: RtspRequest): RtspResponse {
         val info = mapOf(
-            "deviceid" to com.weekd.miracastreceiver.util.NetworkUtils.getMacAddress(),
+            "deviceid" to com.weekd.miracastreceiver.util.NetworkUtils.getAirPlayDeviceId(context),
             // 视频投送连接读这里的 features 决定是否先做 FairPlay：声明了 FairPlay 认证位时，iPhone
             // 会走 fp-setup → fp-setup2（未实现）然后放弃投送。参照乐播只声明 AirPlay 1 的视频类能力
             // （0x2A7F：Video/Photo/VideoFairPlay/VolumeControl/HLS/Slideshow/bit6/Audio/bit11/bit13），
@@ -1013,36 +1019,20 @@ open class RtspHandler(
     }
 
     /**
-     * Handles TEARDOWN. A TEARDOWN may target SPECIFIC streams (AirPlay 2 dynamic stream removal —
-     * e.g. macOS drops the audio stream when playback stops) or the whole session. If the body lists
-     * streams and they're audio-only, we stop just the audio and KEEP the mirror running; otherwise
-     * we tear the whole session down. (Previously any TEARDOWN killed the mirror, so stopping audio
-     * on the Mac ended screen mirroring entirely.)
+     * Stream-scoped TEARDOWN removes only the named streams, even the last one: a sender
+     * can re-add video with a different resolution on the same control connection.
+     * A session TEARDOWN (no streams list) or socket closure performs full cleanup.
      */
     open fun handleTeardownInternal(request: RtspRequest): RtspResponse {
         val streamTypes = parseTeardownStreamTypes(request.bodyBytes)
         if (streamTypes != null && streamTypes.isNotEmpty()) {
-            // Stream-level teardown: stop ONLY the listed streams. Keep the session (keys, NTP,
-            // event channel) alive so the remaining stream keeps running and a stopped one can be
-            // re-added later — e.g. audio keeps playing with video gone, or video keeps mirroring
-            // with audio stopped. But if this removes the LAST active stream (e.g. macOS names both
-            // 96 and 110 to end the session), fall through to a full teardown so cleanup isn't left
-            // to the eventual socket close.
+            // A resolution switch may remove the last video stream before re-adding it.
+            // Only session TEARDOWN or control-socket closure ends the session and clears keys.
             if (streamTypes.contains(96)) { onMirrorAudioStop(); activeStreamTypes.remove(96) }
             if (streamTypes.contains(110)) { onMirrorVideoStop(); activeStreamTypes.remove(110) }
             if (streamTypes.contains(103)) { onBufferedAudioStop(); activeStreamTypes.remove(103) }
-            if (activeStreamTypes.isNotEmpty()) {
-                Logger.i("TEARDOWN streams=$streamTypes — stopped those, session continues (active=$activeStreamTypes)")
-                return RtspResponse(statusCode = 200, statusMessage = "OK", protocol = request.responseProtocol())
-            }
-            if (isUrlVideoActive()) {
-                // 镜像中全屏切到视频投送：iPhone 拆掉镜像流，但控制连接和会话（密钥、事件通道、NTP）
-                // 要保留——视频结束后它会在同一会话上重新 SETUP 镜像流（见乐播日志）。这里拆掉会话
-                // 会让 iPhone 直接断开主连接，广告播完后正片就再也投不过来。
-                Logger.i("TEARDOWN streams=$streamTypes — last mirror stream removed during URL video; keeping the session")
-                return RtspResponse(statusCode = 200, statusMessage = "OK", protocol = request.responseProtocol())
-            }
-            Logger.i("TEARDOWN streams=$streamTypes — last stream removed, ending session")
+            Logger.i("TEARDOWN streams=$streamTypes — session continues (active=$activeStreamTypes)")
+            return RtspResponse(statusCode = 200, statusMessage = "OK", protocol = request.responseProtocol())
         } else {
             Logger.i("TEARDOWN (session, body=${request.bodyBytes.size}B) — streaming stopping")
         }

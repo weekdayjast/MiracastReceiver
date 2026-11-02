@@ -1,6 +1,7 @@
 package com.weekd.miracastreceiver.service
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -44,6 +45,7 @@ class CastReceiverService : Service() {
         /** 由 BootReceiver 设置：标记这次启动来自开机广播。 */
         const val EXTRA_FROM_BOOT = "from_boot"
 
+        private const val ACTION_STOP_CAST = "com.weekd.miracastreceiver.STOP_CAST"
         private const val NOTIFICATION_ID = 1001
         private const val CHANNEL_ID = "cast_receiver_service"
         private const val ACTION_UPDATE_POSITION = "com.weekd.miracastreceiver.ACTION_UPDATE_POSITION"
@@ -74,6 +76,14 @@ class CastReceiverService : Service() {
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
+                "com.weekd.miracastreceiver.DISCONNECT_SENDER" -> {
+                    if (intent.getBooleanExtra("miracast", false)) {
+                        wfdServer.disconnectSender()
+                        wifiDirectManager.disconnectSender()
+                    } else {
+                        airPlayReceiver.disconnectSender()
+                    }
+                }
                 ACTION_UPDATE_POSITION -> {
                     val position = intent.getLongExtra("position", 0L)
                     val duration = intent.getLongExtra("duration", 0L)
@@ -146,14 +156,12 @@ class CastReceiverService : Service() {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
                     }
                     startActivity(intent)
-                } else if (state != com.weekd.miracastreceiver.airplay.AirPlayState.CONNECTED &&
-                    airPlayPlayerStarted
-                ) {
-                    // iPhone 结束镜像（TEARDOWN 或连接断开）后必须主动关掉播放页，
-                    // 否则画面会一直停在最后一帧。只在确实由 AirPlay 拉起过播放页时才发，
-                    // 免得误关正在播放的 DLNA 内容。
+                }
+            },
+            onSessionEnded = {
+                if (airPlayPlayerStarted) {
                     airPlayPlayerStarted = false
-                    Timber.i("AirPlay disconnected ($state), closing player")
+                    Timber.i("AirPlay session ended, closing player")
                     sendBroadcast(Intent(com.weekd.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
                         setPackage(packageName)
                     })
@@ -168,6 +176,7 @@ class CastReceiverService : Service() {
         // 初始化 DLNA/UPnP 服务
         initDlnaServices()
         val playerStateFilter = IntentFilter().apply {
+            addAction("com.weekd.miracastreceiver.DISCONNECT_SENDER")
             addAction(ACTION_UPDATE_POSITION)
             addAction(ACTION_PLAYBACK_STOPPED)
         }
@@ -357,6 +366,15 @@ class CastReceiverService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_CAST) {
+            // Stop the service as well as the player: audio can outlive its Surface/Activity.
+            airPlayPlayerStarted = false
+            sendBroadcast(Intent(com.weekd.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
+                setPackage(packageName)
+            })
+            stopSelf()
+            return START_NOT_STICKY
+        }
         val fromBoot = intent?.getBooleanExtra(EXTRA_FROM_BOOT, false) ?: false
         Timber.i("CastReceiverService started (fromBoot=$fromBoot)")
 
@@ -431,7 +449,7 @@ class CastReceiverService : Service() {
         servicesStarted = true
         // 启动 AirPlay 2 接收器
         airPlayReceiver.start()
-        // 播放页换渲染 Surface（手动旋转画面）时，让 AirPlay 投送的 URL 视频跟着换过去
+        // Surface 重建时，恢复 AirPlay URL 视频与屏幕镜像的输出
         com.weekd.miracastreceiver.ui.PlayerActivity.mirrorSurfaceListener = { airPlayReceiver.onVideoSurfaceChanged() }
 
         // 启动 DLNA/UPnP 服务
@@ -524,12 +542,22 @@ class CastReceiverService : Service() {
     }
 
     private fun createNotification(): Notification {
+        val openApp = PendingIntent.getActivity(
+            this, 0, Intent(this, com.weekd.miracastreceiver.ui.MainActivity::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val stopCast = PendingIntent.getService(
+            this, 1, Intent(this, CastReceiverService::class.java).setAction(ACTION_STOP_CAST),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.app_name))
             .setContentText(getString(R.string.notification_waiting))
             .setSmallIcon(R.drawable.ic_stat_miracast)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
+            .setContentIntent(openApp)
+            .addAction(android.R.drawable.ic_media_pause, getString(R.string.notification_stop_cast), stopCast)
             .build()
     }
 }

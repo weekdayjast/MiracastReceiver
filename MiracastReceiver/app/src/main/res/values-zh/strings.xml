@@ -94,4 +94,5 @@
     <string name="notification_channel_name">投屏接收服务</string>
     <string name="notification_channel_description">保持投屏接收服务运行</string>
     <string name="notification_waiting">正在等待 AirPlay/DLNA/Miracast 投屏连接</string>
+    <string name="notification_stop_cast">停止投屏</string>
 </resources>

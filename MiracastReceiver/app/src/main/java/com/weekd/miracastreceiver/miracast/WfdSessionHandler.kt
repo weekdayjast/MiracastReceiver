@@ -86,6 +86,9 @@ class WfdSessionHandler(
 
     // ─── 读取一条完整 RTSP 消息（头部 + 按 Content-Length 读 body）────────────
     private fun readMessage(): String? {
+        // 握手失败的 Source 可能一直不关闭 TCP。不能永久占住唯一的会话循环。
+        // 正常播放时保留更长时间，允许 Source 按协议发送 keep-alive。
+        socket.soTimeout = if (sessionId.isEmpty()) 15_000 else 90_000
         val buf = StringBuilder()
         val one = ByteArray(1)
 
@@ -277,6 +280,16 @@ class WfdSessionHandler(
             socket.close()
         } catch (e: Exception) {
             Timber.e(e, "Error closing WFD session socket")
+        }
+    }
+
+    fun disconnectSender() {
+        try {
+            if (sessionId.isNotEmpty()) send(
+                "TEARDOWN $presentationUrl RTSP/1.0\r\nCSeq: ${++outCseq}\r\nSession: $sessionId\r\n\r\n"
+            )
+        } finally {
+            close()
         }
     }
 }

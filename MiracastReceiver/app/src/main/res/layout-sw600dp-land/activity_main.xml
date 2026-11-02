@@ -182,6 +182,19 @@
                     android:textSize="13sp" />
             </LinearLayout>
 
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switch_auto_rotate"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_setting_item"
+                android:padding="18dp"
+                android:focusable="true"
+                android:focusableInTouchMode="false"
+                android:text="@string/auto_rotate_to_fit"
+                android:textColor="@color/text_primary"
+                android:textSize="20sp" />
+
             <!-- 设置：界面语言 -->
             <LinearLayout
                 android:id="@+id/setting_language"

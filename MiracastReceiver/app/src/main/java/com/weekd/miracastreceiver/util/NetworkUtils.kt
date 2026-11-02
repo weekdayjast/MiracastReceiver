@@ -104,6 +104,7 @@ object NetworkUtils {
      * @param context Android context (needed to read/write secure settings)
      * @return A stable UUID string in standard "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" format.
      */
+    @Synchronized
     fun getPersistentUuid(context: Context): String {
         // Persist the UUID in the app's own private SharedPreferences.
         // (Originally this used Settings.Secure, which requires the privileged
@@ -120,6 +121,14 @@ object NetworkUtils {
         val newUuid = UUID.randomUUID().toString()
         prefs.edit().putString(PREF_KEY_DEVICE_UUID, newUuid).apply()
         return newUuid
+    }
+
+    /** Stable MAC-shaped AirPlay identity, independent of physical/P2P interface order. */
+    fun getAirPlayDeviceId(context: Context): String {
+        val id = UUID.fromString(getPersistentUuid(context))
+        val bytes = ByteArray(6) { i -> (id.mostSignificantBits ushr (i * 8)).toByte() }
+        bytes[0] = ((bytes[0].toInt() and 0xfc) or 0x02).toByte() // local, unicast
+        return bytes.joinToString(":") { "%02x".format(it.toInt() and 0xff) }
     }
 
     // Constants

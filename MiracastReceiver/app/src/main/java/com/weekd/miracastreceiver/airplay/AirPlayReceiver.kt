@@ -13,7 +13,6 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.ServerSocket
@@ -90,7 +89,9 @@ class AirPlayReceiver(
      */
     private val onNowPlayingChanged: (NowPlayingInfo?) -> Unit = {},
     /** Pairing PIN to show ([pin]) or hide (null) on the TV during SRP pair-setup. */
-    private val onPinChanged: (pin: String?) -> Unit = {}
+    private val onPinChanged: (pin: String?) -> Unit = {},
+    /** A real session end, independent of mDNS registration state. Dispatched on Main. */
+    private val onSessionEnded: () -> Unit = {}
 ) {
 
     // Persistent store of paired controllers (for PIN access control / pair-verify).
@@ -99,6 +100,10 @@ class AirPlayReceiver(
     // SupervisorJob: child coroutine failures don't propagate to siblings.
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    private val lifecycle = AirPlayLifecycle(
+        onStateChanged = { state -> dispatchState(state) },
+        onSessionEnded = { scope.launch(Dispatchers.Main) { onSessionEnded() } }
+    )
 
     // Child components
     private var mdnsService: MdnsService? = null
@@ -187,12 +192,19 @@ class AirPlayReceiver(
      * AirPlay sender — e.g. play/pause or skip what the Mac/iPhone is streaming. No-op if no sender
      * has advertised a DACP identity yet.
      */
-    /** 播放页换了渲染 Surface（手动旋转、切后台回来）时调用：让 URL 视频播放器重新挂到新 Surface 上。 */
+    /** 播放页的 Surface 重建时，通知 URL 播放器和镜像解码线程恢复输出。 */
     fun onVideoSurfaceChanged() {
         urlVideoPlayer?.attachSurface()
+        mirrorServer?.onSurfaceChanged()
     }
 
     fun sendRemoteCommand(command: String) = dacpClient.sendCommand(command)
+
+    fun disconnectSender() {
+        scope.launch {
+            rtspHandler?.disconnectSender()
+        }
+    }
 
     /** True once a sender has advertised DACP reverse-control (so the TV remote can drive playback). */
     fun isRemoteControlAvailable(): Boolean = dacpClient.isAvailable
@@ -207,7 +219,7 @@ class AirPlayReceiver(
     private fun startMdnsService() {
         mdnsService = MdnsService(
             context = context,
-            onStateChange = { state -> emitState(state) },
+            onStateChange = { state -> lifecycle.discoveryChanged(state) },
             onActualNameRegistered = { actualName -> onActualNameRegistered(actualName) }
         ).also { it.start(displayName.ifBlank { null }) }
         Logger.d("mDNS service started")
@@ -307,7 +319,7 @@ class AirPlayReceiver(
         }
         Logger.i("Streaming stopped — releasing media components")
         releaseMediaComponents()
-        emitState(AirPlayState.ADVERTISING)
+        lifecycle.sessionEnded()
 
         scope.launch {
             try {
@@ -464,6 +476,7 @@ class AirPlayReceiver(
     private fun startMirrorStream(streamConnectionId: Long): Int {
         val aesKey = mirrorAesKey ?: run { Logger.e("mirror stream start before keys set"); return 0 }
         val ecdhSecret = mirrorEcdhSecret ?: return 0
+        mirrorServer?.stop()
         return MirrorStreamServer(aesKey, ecdhSecret, streamConnectionId, videoSurfaceProvider, mirrorWidth, mirrorHeight)
             .also { mirrorServer = it; it.start(scope); videoPlaying = true; emitNowPlaying() }
             .dataPort
@@ -642,11 +655,13 @@ class AirPlayReceiver(
 
     /** Dispatches [state] on the Main thread (Android UI rule). */
     private fun emitState(state: AirPlayState) {
-        scope.launch {
-            withContext(Dispatchers.Main) {
-                onStateChanged(state)
-            }
-        }
+        if (state == AirPlayState.CONNECTED) lifecycle.sessionConnected()
+        else lifecycle.discoveryChanged(state)
+    }
+
+    private fun dispatchState(state: AirPlayState) {
+        // Enqueue directly on Main to preserve connect/end ordering across callbacks.
+        scope.launch(Dispatchers.Main) { onStateChanged(state) }
     }
 
     companion object {

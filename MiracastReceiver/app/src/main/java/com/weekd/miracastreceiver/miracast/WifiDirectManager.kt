@@ -382,4 +382,17 @@ class WifiDirectManager(
     }
 
     fun isRunning(): Boolean = isStarted
+
+    /** Drop the current sender's P2P link, then prepare a fresh receiving group. */
+    fun disconnectSender() {
+        val ch = channel ?: return
+        manager?.removeGroup(ch, object : WifiP2pManager.ActionListener {
+            override fun onSuccess() {
+                if (isStarted && channel === ch) createGroup()
+            }
+            override fun onFailure(reason: Int) {
+                Timber.w("Miracast disconnect group failed: $reason")
+            }
+        })
+    }
 }

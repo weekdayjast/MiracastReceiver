@@ -34,6 +34,7 @@ class WfdServer(
 
     @Volatile
     private var isRunning = false
+    @Volatile private var reconnectAfterMs = 0L
 
     private var sessionHandler: WfdSessionHandler? = null
     private var rtpReceiver: RtpReceiver? = null
@@ -61,6 +62,10 @@ class WfdServer(
         scope.launch {
             while (isRunning) {
                 try {
+                    if (android.os.SystemClock.elapsedRealtime() < reconnectAfterMs) {
+                        delay(SCAN_INTERVAL_MS)
+                        continue
+                    }
                     val socket = dialSource()
                     if (socket != null) {
                         runSession(socket)
@@ -165,4 +170,10 @@ class WfdServer(
     }
 
     fun isRunning(): Boolean = isRunning
+
+    fun disconnectSender() {
+        reconnectAfterMs = android.os.SystemClock.elapsedRealtime() + 5000
+        val current = sessionHandler
+        scope.launch { runCatching { current?.disconnectSender() } }
+    }
 }
