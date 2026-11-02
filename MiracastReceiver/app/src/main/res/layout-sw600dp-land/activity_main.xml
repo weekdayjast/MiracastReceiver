@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  横屏版式（电视 / 平板）。
+  原版把标题、设置、说明竖着堆成一条，平放后左右两侧各留一大片空白，
+  1080p 电视上还会显得字号偏小、信息全挤在屏幕中间一条。
+  这里改成左右两栏：左边回答"我是谁、现在什么状态"，右边回答"能改什么、怎么连"。
+
+  只在 sw600dp 的横屏生效 —— 手机横屏屏幕高度只有 360dp 左右，塞不进 40sp 的设备名，
+  继续用竖屏版式更好。所有控件 id 与原版一致，代码里的 findViewById 不需要改。
+  四周留安全边距，避免部分电视过扫描把边缘文字切掉。
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/background_dark"
+    android:fillViewport="true"
+    android:scrollbars="none"
+    tools:context=".ui.MainActivity">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingLeft="64dp"
+        android:paddingTop="40dp"
+        android:paddingRight="56dp"
+        android:paddingBottom="40dp">
+
+        <!-- ============ 左栏：设备身份与接收状态 ============ -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1.15"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.04"
+                android:text="@string/app_name"
+                android:textColor="@color/text_secondary"
+                android:textSize="24sp" />
+
+            <View
+                android:layout_width="72dp"
+                android:layout_height="4dp"
+                android:layout_marginTop="14dp"
+                android:background="@color/accent" />
+
+            <!-- 设备名：电视上最主要的一行，40sp 在 1080p 下约合 80px 高，
+                 沙发距离可读；名称特别长时最多两行，不裁切 -->
+            <TextView
+                android:id="@+id/tv_device_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="26dp"
+                android:ellipsize="end"
+                android:fontFamily="sans-serif-medium"
+                android:letterSpacing="0.01"
+                android:maxLines="2"
+                android:textColor="@color/text_primary"
+                android:textSize="40sp"
+                tools:text="SONY XR-55A80J" />
+
+            <TextView
+                android:id="@+id/tv_device_ip"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:maxLines="1"
+                android:textColor="@color/text_secondary"
+                android:textSize="18sp"
+                tools:text="设备 IP: 192.168.1.100" />
+
+            <!-- 状态行：转圈 + 文案，左对齐比居中更像状态指示 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="36dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ProgressBar
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:indeterminate="true"
+                    android:indeterminateTint="@color/accent" />
+
+                <TextView
+                    android:id="@+id/tv_status"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="14dp"
+                    android:layout_weight="1"
+                    android:text="@string/waiting_connection"
+                    android:textColor="@color/text_primary"
+                    android:textSize="22sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 两栏之间的分隔线，让左右关系更明确 -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="320dp"
+            android:layout_marginLeft="40dp"
+            android:layout_marginRight="40dp"
+            android:background="@color/background_card" />
+
+        <!-- ============ 右栏：设置与连接说明 ============ -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- 设置：开机自启 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:addStatesFromChildren="true"
+                android:background="@drawable/bg_setting_item"
+                android:orientation="vertical"
+                android:paddingLeft="22dp"
+                android:paddingTop="18dp"
+                android:paddingRight="22dp"
+                android:paddingBottom="18dp">
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/switch_auto_start"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:focusable="true"
+                    android:focusableInTouchMode="false"
+                    android:text="@string/auto_start_on_boot"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="@string/auto_start_on_boot_hint"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp" />
+            </LinearLayout>
+
+            <!-- 设置：界面语言 -->
+            <LinearLayout
+                android:id="@+id/setting_language"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_setting_item"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingLeft="22dp"
+                android:paddingTop="20dp"
+                android:paddingRight="22dp"
+                android:paddingBottom="20dp">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/language"
+                    android:textColor="@color/text_primary"
+                    android:textSize="20sp" />
+
+                <TextView
+                    android:id="@+id/tv_language_value"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textColor="@color/accent"
+                    android:textSize="20sp"
+                    tools:text="English" />
+            </LinearLayout>
+
+            <!-- 连接说明：标题前加一条与左侧呼应的短竖线 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="34dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <View
+                    android:layout_width="3dp"
+                    android:layout_height="18dp"
+                    android:background="@color/accent" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="10dp"
+                    android:text="@string/how_to_connect"
+                    android:textColor="@color/text_primary"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:lineSpacingExtra="8dp"
+                android:text="@string/connect_instruction"
+                android:textColor="@color/text_secondary"
+                android:textSize="15sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</ScrollView>
