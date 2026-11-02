@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. पक्का करें कि भेजने वाला डिवाइस और टीवी एक ही लोकल नेटवर्क पर हैं\n2. भेजने वाले डिवाइस पर कास्टिंग ऐप खोलें\n3. इस डिवाइस को खोजें और चुनें\n4. कास्ट करना शुरू करें</string>
     <string name="auto_start_on_boot">चालू होने पर रिसीवर अपने-आप शुरू करें</string>
     <string name="auto_start_on_boot_hint">टीवी चालू होने के बाद बैकग्राउंड में अपने-आप चलता है, इस ऐप को खोलने की ज़रूरत नहीं। कुछ टीवी पर सिस्टम सेटिंग में इस ऐप को अपने-आप शुरू होने की अनुमति देनी होती है।</string>
+    <string name="return_to_app_after_cast">कास्टिंग खत्म होने पर इस ऐप पर लौटें</string>
+    <string name="return_to_app_after_cast_hint">कास्टिंग बंद करने पर टीवी की होम स्क्रीन के बजाय यह सेटिंग्स पेज खुला रहता है। सत्र के तुरंत बाद सेटिंग्स बदलनी हों तो उपयोगी।</string>
     <string name="language">भाषा</string>
     <string name="language_follow_system">सिस्टम के अनुसार</string>
     <string name="status_no_network">नेटवर्क कनेक्ट नहीं है</string>

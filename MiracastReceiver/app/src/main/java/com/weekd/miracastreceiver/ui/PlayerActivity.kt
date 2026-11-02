@@ -43,6 +43,7 @@ import androidx.media3.ui.PlayerView
 import com.weekd.miracastreceiver.R
 import com.weekd.miracastreceiver.airplay.StreamStats
 import com.weekd.miracastreceiver.miracast.RtpReceiver
+import com.weekd.miracastreceiver.util.AppSettings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -175,7 +176,7 @@ class PlayerActivity : AppCompatActivity() {
                 ACTION_PAUSE -> if (isCurrentImage()) stopImageSlideShow() else player?.pause()
                 ACTION_STOP -> {
                     stopPlayback()
-                    finish()
+                    exitPlayer()
                 }
                 ACTION_SEEK -> {
                     val position = intent.getLongExtra(EXTRA_SEEK_POSITION, 0L)
@@ -1304,9 +1305,34 @@ class PlayerActivity : AppCompatActivity() {
         Timber.i("PlayerActivity destroyed")
     }
 
+    /**
+     * 退出播放界面的统一出口。遥控器返回键和手机端「停止投屏」都走这里。
+     *
+     * 开关关闭时回电视桌面，但这里不能只用 finish()：设置页经常已经压在同一个任务栈底下
+     * （用户先在电视上打开过 App 看 IP 或改设置），单 finish() 只是把播放页弹掉，
+     * 露出来的是下面那一页，看起来就是「退出投屏又回到了这个应用」。
+     * 用 finishAffinity() 把同一任务里同 affinity 的页面一起结束，任务空下来才回到桌面。
+     * 实测 finishAndRemoveTask() 在部分电视固件上只关掉播放页、不动下面的页面，不可用。
+     *
+     * 开关打开时走另一条路：把设置页带到栈顶再结束播放页。用 CLEAR_TOP + SINGLE_TOP
+     * 复用已经在栈里的实例（否则会再叠一个设置页，返回一次才退干净）。
+     */
+    private fun exitPlayer() {
+        if (AppSettings.isReturnToAppAfterCast(this)) {
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+            )
+            finish()
+        } else {
+            finishAffinity()
+        }
+    }
+
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         stopPlayback()
-        super.onBackPressed()
+        exitPlayer()
     }
 }

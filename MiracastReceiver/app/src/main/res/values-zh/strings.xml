@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. 确保发送设备与电视在同一局域网\n2. 打开发送端应用\n3. 扫描并选择此设备\n4. 开始投屏</string>
     <string name="auto_start_on_boot">开机自动启动接收服务</string>
     <string name="auto_start_on_boot_hint">电视开机后在后台自动运行，无需手动打开本应用。部分电视需要在系统设置里允许本应用自启动。</string>
+    <string name="return_to_app_after_cast">投屏结束后回到本应用</string>
+    <string name="return_to_app_after_cast_hint">停止投屏后停在设置页，而不是回到电视桌面。适合投完屏就要接着调设置的情况。</string>
     <string name="language">语言</string>
     <string name="language_follow_system">跟随系统</string>
     <string name="status_no_network">网络未连接</string>

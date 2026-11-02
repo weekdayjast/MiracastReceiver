@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. 보내는 기기와 TV가 같은 로컬 네트워크에 있는지 확인\n2. 보내는 기기에서 캐스트 앱 열기\n3. 이 기기를 검색하여 선택\n4. 캐스트 시작</string>
     <string name="auto_start_on_boot">부팅 시 수신 서비스 자동 시작</string>
     <string name="auto_start_on_boot_hint">TV를 켜면 백그라운드에서 자동으로 실행되며 앱을 직접 열 필요가 없습니다. 일부 TV에서는 시스템 설정에서 이 앱의 자동 시작을 허용해야 합니다.</string>
+    <string name="return_to_app_after_cast">캐스팅 종료 후 이 앱으로 돌아가기</string>
+    <string name="return_to_app_after_cast_hint">캐스팅을 중지하면 TV 홈 화면 대신 이 설정 화면에 머뭅니다. 이어서 설정을 바꾸고 싶을 때 유용합니다.</string>
     <string name="language">언어</string>
     <string name="language_follow_system">시스템 설정 따르기</string>
     <string name="status_no_network">네트워크에 연결되지 않음</string>
