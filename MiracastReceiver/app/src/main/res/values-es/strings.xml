@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. Asegúrate de que el dispositivo emisor y el televisor estén en la misma red local\n2. Abre la app de transmisión en el dispositivo emisor\n3. Busca y selecciona este dispositivo\n4. Empieza a transmitir</string>
     <string name="auto_start_on_boot">Iniciar el receptor al encender</string>
     <string name="auto_start_on_boot_hint">Se ejecuta en segundo plano al encender el televisor, sin necesidad de abrir esta app. En algunos televisores hay que permitir el inicio automático de esta app en los ajustes del sistema.</string>
+    <string name="return_to_app_after_cast">Volver a esta app al terminar la emisión</string>
+    <string name="return_to_app_after_cast_hint">Al detener la emisión se queda en esta pantalla de ajustes en lugar de volver al inicio del televisor. Útil si quieres cambiar ajustes justo después.</string>
     <string name="language">Idioma</string>
     <string name="language_follow_system">Idioma del sistema</string>
     <string name="status_no_network">Sin conexión de red</string>

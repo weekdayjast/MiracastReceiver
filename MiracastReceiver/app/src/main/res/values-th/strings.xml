@@ -8,6 +8,8 @@
     <string name="connect_instruction">1. ตรวจสอบว่าอุปกรณ์ที่ส่งและทีวีอยู่ในเครือข่ายเดียวกัน\n2. เปิดแอปแคสต์บนอุปกรณ์ที่ส่ง\n3. ค้นหาและเลือกอุปกรณ์นี้\n4. เริ่มแคสต์</string>
     <string name="auto_start_on_boot">เริ่มบริการรับสัญญาณอัตโนมัติเมื่อเปิดเครื่อง</string>
     <string name="auto_start_on_boot_hint">ทำงานในพื้นหลังโดยอัตโนมัติเมื่อเปิดทีวี ไม่ต้องเปิดแอปนี้เอง ทีวีบางรุ่นต้องอนุญาตให้แอปนี้เริ่มทำงานอัตโนมัติในการตั้งค่าระบบ</string>
+    <string name="return_to_app_after_cast">กลับมาที่แอปนี้หลังจบการแคสต์</string>
+    <string name="return_to_app_after_cast_hint">เมื่อหยุดแคสต์จะอยู่ในหน้าการตั้งค่านี้แทนการกลับไปหน้าหลักของทีวี เหมาะเมื่อต้องการปรับการตั้งค่าต่อทันที</string>
     <string name="language">ภาษา</string>
     <string name="language_follow_system">ตามระบบ</string>
     <string name="status_no_network">ไม่ได้เชื่อมต่อเครือข่าย</string>

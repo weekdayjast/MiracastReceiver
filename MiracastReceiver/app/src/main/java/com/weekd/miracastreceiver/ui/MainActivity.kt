@@ -40,6 +40,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDeviceIp: TextView
     private lateinit var tvStatus: TextView
     private lateinit var switchAutoStart: SwitchCompat
+    private lateinit var switchReturnToApp: SwitchCompat
     private lateinit var tvLanguageValue: TextView
 
     /** 定位权限弹窗还在时不叠加悬浮窗权限提示，等它有结果再说 */
@@ -172,6 +173,7 @@ class MainActivity : AppCompatActivity() {
         tvDeviceIp = findViewById(R.id.tv_device_ip)
         tvStatus = findViewById(R.id.tv_status)
         switchAutoStart = findViewById(R.id.switch_auto_start)
+        switchReturnToApp = findViewById(R.id.switch_return_to_app)
         tvLanguageValue = findViewById(R.id.tv_language_value)
 
         // 开机自启开关
@@ -179,6 +181,13 @@ class MainActivity : AppCompatActivity() {
         switchAutoStart.setOnCheckedChangeListener { _, isChecked ->
             AppSettings.setAutoStartOnBoot(this, isChecked)
             Timber.i("Auto start on boot set to $isChecked")
+        }
+
+        // 投屏结束后是否留在本应用
+        switchReturnToApp.isChecked = AppSettings.isReturnToAppAfterCast(this)
+        switchReturnToApp.setOnCheckedChangeListener { _, isChecked ->
+            AppSettings.setReturnToAppAfterCast(this, isChecked)
+            Timber.i("Return to app after cast set to $isChecked")
         }
 
         // 界面语言

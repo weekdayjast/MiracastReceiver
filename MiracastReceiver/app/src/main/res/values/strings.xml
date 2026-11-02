@@ -11,6 +11,8 @@
     <string name="connect_instruction">1. Make sure the sending device and the TV are on the same local network\n2. Open the casting app on the sender\n3. Scan for and select this device\n4. Start casting</string>
     <string name="auto_start_on_boot">Start receiver on boot</string>
     <string name="auto_start_on_boot_hint">Runs in the background after the TV turns on, without opening this app. Some TVs also require allowing auto-start for this app in system settings.</string>
+    <string name="return_to_app_after_cast">Return to this app after casting</string>
+    <string name="return_to_app_after_cast_hint">Stops on this settings page instead of going back to the TV home screen when you stop casting. Useful when you want to change settings right after a session.</string>
     <string name="language">Language</string>
     <string name="language_follow_system">Follow system</string>
     <string name="status_no_network">No network connection</string>
