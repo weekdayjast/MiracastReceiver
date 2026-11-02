@@ -1308,16 +1308,26 @@ class PlayerActivity : AppCompatActivity() {
     /**
      * 退出播放界面的统一出口。遥控器返回键和手机端「停止投屏」都走这里。
      *
-     * 默认只 finish：这一页关掉，任务空了系统自然回落到桌面。
-     * 打开「投屏结束后回到本应用」时，先把设置页压到栈上再 finish —— 播放页在它上面
-     * 销毁后，停下的就是设置页，方便接着调设置或确认接收状态。两条路径都不留空任务：
-     * finish 的是任务里的最后一个 Activity，任务随之从最近任务里消失。
+     * 开关关闭时回电视桌面，但这里不能只用 finish()：设置页经常已经压在同一个任务栈底下
+     * （用户先在电视上打开过 App 看 IP 或改设置），单 finish() 只是把播放页弹掉，
+     * 露出来的是下面那一页，看起来就是「退出投屏又回到了这个应用」。
+     * 用 finishAffinity() 把同一任务里同 affinity 的页面一起结束，任务空下来才回到桌面。
+     * 实测 finishAndRemoveTask() 在部分电视固件上只关掉播放页、不动下面的页面，不可用。
+     *
+     * 开关打开时走另一条路：把设置页带到栈顶再结束播放页。用 CLEAR_TOP + SINGLE_TOP
+     * 复用已经在栈里的实例（否则会再叠一个设置页，返回一次才退干净）。
      */
     private fun exitPlayer() {
         if (AppSettings.isReturnToAppAfterCast(this)) {
-            startActivity(Intent(this, MainActivity::class.java))
+            startActivity(
+                Intent(this, MainActivity::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+            )
+            finish()
+        } else {
+            finishAffinity()
         }
-        finish()
     }
 
     @Deprecated("Deprecated in Java")
