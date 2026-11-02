@@ -53,22 +53,38 @@ object NetworkUtils {
     }
 
     /**
-     * 获取本机 IP 地址
+     * 获取本机在当前局域网里的 IPv4 地址。
+     *
+     * 优先问系统「默认网络是哪一张网卡」，取它的 LinkProperties —— 这才是手机
+     * 真正能访问到的那个地址。
+     *
+     * 早期版本是直接遍历 NetworkInterface 取第一个非回环 IPv4，但遍历顺序由内核
+     * 枚举顺序决定，电视上 p2p0（Wi-Fi Direct，常见 192.168.49.x / 通配 192.168.x.x）
+     * 往往排在 wlan0 前面。结果是界面和 mDNS TXT 里报出去的地址是投屏根本用不到
+     * 的 p2p 地址，用户照着这个 IP 去连是连不上的。DeviceInfoProvider 和 DLNA
+     * 也走同一个方法，所以这个错误地址还会被写进 AirPlay / DLNA 的 announce 报文。
+     *
+     * @param context 传了就优先走系统的默认网络；为 null 时退回纯网卡遍历（兼容旧调用）。
      */
-    fun getLocalIpAddress(): String? {
+    fun getLocalIpAddress(context: Context? = null): String? {
+        if (context != null) {
+            getDefaultNetworkIpv4(context)?.let { return it }
+        }
+
         try {
             val interfaces = NetworkInterface.getNetworkInterfaces()
             while (interfaces.hasMoreElements()) {
                 val networkInterface = interfaces.nextElement()
-                val addresses = networkInterface.inetAddresses
+                if (!isRealNetworkInterface(networkInterface)) continue
 
+                val addresses = networkInterface.inetAddresses
                 while (addresses.hasMoreElements()) {
                     val address = addresses.nextElement()
 
                     // 只返回 IPv4 地址，排除回环地址
                     if (!address.isLoopbackAddress && address is Inet4Address) {
                         val ip = address.hostAddress
-                        Timber.d("Found IP address: $ip")
+                        Timber.d("Found IP address: $ip (${networkInterface.name})")
                         return ip
                     }
                 }
@@ -78,6 +94,47 @@ object NetworkUtils {
         }
         return null
     }
+
+    /** 默认网络（有路由的那张网卡）的 IPv4 地址。API 23 起才有 activeNetwork。 */
+    private fun getDefaultNetworkIpv4(context: Context): String? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return null
+
+        return try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+            val network = cm?.activeNetwork ?: return null
+            val linkProperties = cm.getLinkProperties(network) ?: return null
+
+            val ip = linkProperties.linkAddresses
+                .map { it.address }
+                .firstOrNull { it is Inet4Address && !it.isLoopbackAddress }
+                ?.hostAddress
+
+            ip?.let { Timber.d("Found IP address: $it (default network)") }
+            ip
+        } catch (e: Exception) {
+            Timber.w(e, "Error reading address of the default network")
+            null
+        }
+    }
+
+    /**
+     * 是否是一张真实的上网网卡。
+     *
+     * 跳过 p2p（Wi-Fi Direct）、dummy、tun/tap（VPN）、rmnet（蜂窝）等虚拟接口：
+     * 它们也有 IPv4 地址，但都不是手机该连的那个。
+     */
+    private fun isRealNetworkInterface(networkInterface: NetworkInterface): Boolean {
+        if (networkInterface.isLoopback) return false
+        if (!networkInterface.isUp) return false
+
+        val name = networkInterface.name.lowercase()
+        return VIRTUAL_INTERFACE_PREFIXES.none { name.startsWith(it) }
+    }
+
+    /** 虚拟网卡名前缀，见 [isRealNetworkInterface]。 */
+    private val VIRTUAL_INTERFACE_PREFIXES = listOf(
+        "p2p", "dummy", "tun", "tap", "rmnet", "ppp", "sit", "ip6tnl", "ipsec", "clat"
+    )
 
     /**
      * 获取 Wi-Fi SSID

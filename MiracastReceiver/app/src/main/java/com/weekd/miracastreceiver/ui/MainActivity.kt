@@ -226,7 +226,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // 获取 IP 地址
-        val ipAddress = NetworkUtils.getLocalIpAddress()
+        val ipAddress = NetworkUtils.getLocalIpAddress(this)
         if (ipAddress != null) {
             tvDeviceIp.text = getString(R.string.device_ip, ipAddress)
             Timber.i("Local IP: $ipAddress")

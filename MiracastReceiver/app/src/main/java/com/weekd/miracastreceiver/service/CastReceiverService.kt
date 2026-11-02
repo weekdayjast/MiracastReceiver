@@ -226,7 +226,7 @@ class CastReceiverService : Service() {
 
     private fun initDlnaServices() {
         val deviceInfoProvider = DeviceInfoProvider(this)
-        val localIp = NetworkUtils.getLocalIpAddress() ?: "127.0.0.1"
+        val localIp = NetworkUtils.getLocalIpAddress(this) ?: "127.0.0.1"
 
         // 创建 DLNA MediaRenderer
         dlnaRenderer = DlnaMediaRenderer()
@@ -394,7 +394,7 @@ class CastReceiverService : Service() {
             return
         }
 
-        if (NetworkUtils.getLocalIpAddress() != null) {
+        if (NetworkUtils.getLocalIpAddress(this) != null) {
             networkWaitElapsedMs = 0L
             initReceivers()
             startAllServices()
