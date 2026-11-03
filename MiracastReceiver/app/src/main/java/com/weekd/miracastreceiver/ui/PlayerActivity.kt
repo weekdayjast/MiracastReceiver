@@ -48,6 +48,7 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import com.weekd.miracastreceiver.R
+import com.weekd.miracastreceiver.cast.CastPlayerBridge
 import com.weekd.miracastreceiver.airplay.StreamStats
 import com.weekd.miracastreceiver.miracast.RtpReceiver
 import com.weekd.miracastreceiver.util.AppSettings
@@ -133,6 +134,9 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var bufferingIndicator: ProgressBar
 
     private var player: ExoPlayer? = null
+    private var castToken: String? = null
+    private var castIdleReason: String? = null
+    private var castStoppedBySender = false
     private var trackSelector: DefaultTrackSelector? = null
     private var mediaUri: String? = null
     private var mediaTitle: String? = null
@@ -144,6 +148,8 @@ class PlayerActivity : AppCompatActivity() {
     private var qualityHeight: Int = QUALITY_AUTO
     private var isMiracastSession = false
     private var isAirPlayMirrorSession = false
+    private var isPlayerVisible = false
+    private var screenOnSessionActive = false
     private var mirrorAspectJob: Job? = null
     private lateinit var btnRotateOverlay: ImageButton
     private var rotateButtonHideJob: Job? = null
@@ -187,6 +193,22 @@ class PlayerActivity : AppCompatActivity() {
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == CastPlayerBridge.ACTION_COMMAND) {
+                if (castToken == null || intent.getStringExtra(CastPlayerBridge.TOKEN) != castToken) return
+                val value = intent.getDoubleExtra(CastPlayerBridge.VALUE, 0.0)
+                when (intent.getStringExtra(CastPlayerBridge.COMMAND)) {
+                    "PLAY" -> player?.play()
+                    "PAUSE" -> player?.pause()
+                    "SEEK" -> player?.seekTo(value.toLong().coerceAtLeast(0))
+                    "VOLUME" -> player?.volume = value.toFloat().coerceIn(0f, 1f)
+                    "STOP" -> { castStoppedBySender = true; stopPlayback(); exitPlayer() }
+                }
+                reportCastState()
+                return
+            }
+            // Legacy DLNA/AirPlay commands have no Cast token and must not control
+            // a newer Cast load. Global service shutdown uses the scoped bridge too.
+            if (castToken != null) return
             when (intent?.action) {
                 ACTION_PLAY -> if (isCurrentImage()) startImageSlideShow() else player?.play()
                 ACTION_PAUSE -> if (isCurrentImage()) stopImageSlideShow() else player?.pause()
@@ -317,6 +339,10 @@ class PlayerActivity : AppCompatActivity() {
             .build()
             .apply {
                 addListener(object : Player.Listener {
+                    override fun onEvents(player: Player, events: Player.Events) {
+                        updateScreenOn()
+                        reportCastState()
+                    }
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         updateBufferingState(playbackState == Player.STATE_BUFFERING)
                         when (playbackState) {
@@ -355,7 +381,24 @@ class PlayerActivity : AppCompatActivity() {
                         applyRotation()
                     }
 
+                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                        if (castToken == null) return
+                        val video = tracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_VIDEO }
+                        val audio = tracks.groups.filter { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO }
+                        Timber.i("Cast media tracks: video=%d, audio=%d", video.sumOf { it.length }, audio.sumOf { it.length })
+                        tracks.groups.forEach { group ->
+                            for (index in 0 until group.length) {
+                                val format = group.getTrackFormat(index)
+                                Timber.i("Cast track: type=%d, mime=%s, codec=%s, size=%dx%d, selected=%s, supported=%s",
+                                    group.type, format.sampleMimeType, format.codecs, format.width, format.height,
+                                    group.isTrackSelected(index), group.isTrackSupported(index))
+                            }
+                        }
+                    }
+
                     override fun onPlayerError(error: PlaybackException) {
+                        castIdleReason = "ERROR"
+                        reportCastState("IDLE")
                         Timber.e(error, "Player error")
                         updateBufferingState(false)
                         showPlaybackError(error.message)
@@ -526,6 +569,20 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        val nextCastToken = if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "CAST")
+            intent.getStringExtra(CastPlayerBridge.TOKEN) else null
+        if (castToken != null && castToken != nextCastToken) reportCastState("IDLE", "INTERRUPTED", endSession = true)
+        if (castToken == null && nextCastToken != null) reportPlaybackStopped()
+        // Stop the old media before assigning the new load token: its callbacks must not
+        // report IDLE/ERROR against the next Cast LOAD.
+        if (castToken != null || nextCastToken != null) {
+            castToken = null
+            player?.stop()
+            player?.clearMediaItems()
+        }
+        castToken = nextCastToken
+        castIdleReason = null
+        castStoppedBySender = false
         // 每次新的投屏请求都从 0° 开始
         rotationDegrees = 0
         manualRotationDegrees = 0
@@ -576,7 +633,7 @@ class PlayerActivity : AppCompatActivity() {
         mediaTitle = playlistTitles.getOrNull(currentIndex) ?: getString(R.string.title_dlna_indexed, currentIndex + 1, playlist.size)
         tvTitle.text = mediaTitle
         val uri = mediaUri ?: return
-        if (isImageUri(uri)) {
+        if (castToken == null && isImageUri(uri)) {
             showImage(uri)
         } else {
             playMedia(uri)
@@ -588,7 +645,8 @@ class PlayerActivity : AppCompatActivity() {
         isAirPlayMirrorSession = true
         isMiracastSession = false
         streamInfoTracker.reset()
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        screenOnSessionActive = true
+        updateScreenOn()
         stopImageSlideShow()
         player?.clearVideoSurface()
         player?.pause()
@@ -709,8 +767,8 @@ class PlayerActivity : AppCompatActivity() {
         isMiracastSession = true
         isAirPlayMirrorSession = false
         streamInfoTracker.reset()
-        // 画面不经过 ExoPlayer，PlayerView 的自动常亮不生效，必须手动保持，否则电视会进屏保
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        screenOnSessionActive = true
+        updateScreenOn()
         stopImageSlideShow()
 
         player?.clearVideoSurface()
@@ -734,6 +792,7 @@ class PlayerActivity : AppCompatActivity() {
         Timber.i("Playing media: $uri")
         isMiracastSession = false
         isAirPlayMirrorSession = false
+        screenOnSessionActive = true
         streamInfoTracker.reset()
         stopImageSlideShow()
         imageView.visibility = View.GONE
@@ -761,8 +820,18 @@ class PlayerActivity : AppCompatActivity() {
                 player?.setMediaItem(mediaItem)
             }
             player?.prepare()
-            player?.play()
+            if (castToken != null) {
+                player?.seekTo(intent.getLongExtra(CastPlayerBridge.POSITION, 0))
+                player?.volume = intent.getFloatExtra(CastPlayerBridge.VOLUME, 1f).coerceIn(0f, 1f)
+                player?.playWhenReady = intent.getBooleanExtra(CastPlayerBridge.AUTOPLAY, true)
+                reportCastState()
+            } else player?.play()
+            updateScreenOn()
         } catch (e: Exception) {
+            screenOnSessionActive = false
+            updateScreenOn()
+            castIdleReason = "ERROR"
+            reportCastState("IDLE")
             Timber.e(e, "Error playing media")
             showPlaybackError(e.message)
             tvError.visibility = View.VISIBLE
@@ -776,6 +845,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun createMediaItem(uri: String): MediaItem {
+        castToken?.let { token ->
+            return MediaItem.Builder().setMediaId(token).setUri(uri)
+                .setMimeType(intent.getStringExtra(CastPlayerBridge.MIME)).build()
+        }
         // 检测 HLS 流
         val isHls = uri.contains(".m3u8") || uri.contains("/playlist/m3u8")
 
@@ -795,9 +868,11 @@ class PlayerActivity : AppCompatActivity() {
         Timber.i("Showing image: $uri")
         isMiracastSession = false
         isAirPlayMirrorSession = false
+        screenOnSessionActive = true
         player?.pause()
         playerView.visibility = View.GONE
         imageView.visibility = View.VISIBLE
+        updateScreenOn()
         tvError.visibility = View.GONE
         tvStatus.text = getString(R.string.status_showing_image)
         updateBufferingState(true)
@@ -824,6 +899,8 @@ class PlayerActivity : AppCompatActivity() {
                     throw IllegalArgumentException(getString(R.string.error_image_decode))
                 }
             } catch (e: Exception) {
+                screenOnSessionActive = false
+                updateScreenOn()
                 Timber.e(e, "Error showing image")
                 updateBufferingState(false)
                 tvStatus.text = getString(R.string.status_image_error)
@@ -1327,6 +1404,7 @@ class PlayerActivity : AppCompatActivity() {
     private fun registerControlReceiver() {
         val filter = IntentFilter().apply {
             addAction(ACTION_PLAY)
+            addAction(CastPlayerBridge.ACTION_COMMAND)
             addAction(ACTION_PAUSE)
             addAction(ACTION_STOP)
             addAction(ACTION_SEEK)
@@ -1343,14 +1421,18 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        isPlayerVisible = true
         if (isCurrentImage()) startImageSlideShow() else {
-            player?.play()
+            if (castToken == null) player?.play()
             startProgressUpdates()
         }
         if (isStreamInfoVisible) showStreamInfo()
+        updateScreenOn()
     }
 
     override fun onStop() {
+        isPlayerVisible = false
+        updateScreenOn()
         super.onStop()
         if (isCurrentImage()) stopImageSlideShow() else player?.pause()
         stopProgressUpdates()
@@ -1360,14 +1442,26 @@ class PlayerActivity : AppCompatActivity() {
         reportPlaybackPosition()
     }
 
-    private fun stopPlayback() {
+    /** TV 屏保依据前台窗口的常亮标志，不能依赖解码器或 PlayerView 的 Surface。 */
+    private fun updateScreenOn() {
+        val current = player
+        val playing = current != null && current.playerError == null && current.playWhenReady &&
+            (current.playbackState == Player.STATE_BUFFERING || current.playbackState == Player.STATE_READY)
+        val keepOn = isPlayerVisible && screenOnSessionActive &&
+            (isMirrorSession() || isCurrentImage() || playing)
+        if (keepOn) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    private fun stopPlayback(endCastSession: Boolean = false) {
+        screenOnSessionActive = false
         stopImageSlideShow()
         stopProgressUpdates()
         mirrorAspectJob?.cancel()
         mirrorAspectJob = null
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        updateScreenOn()
         player?.stop()
-        reportPlaybackStopped()
+        reportPlaybackStopped(endCastSession)
     }
 
     private fun startProgressUpdates() {
@@ -1386,6 +1480,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun reportPlaybackPosition() {
+        if (castToken != null) { reportCastState(); return }
         val currentPlayer = player ?: return
         val position = currentPlayer.currentPosition
         val duration = currentPlayer.duration.takeIf { it > 0 } ?: 0L
@@ -1404,14 +1499,45 @@ class PlayerActivity : AppCompatActivity() {
      * TV 端本地退出/播放结束时通知 DLNA 渲染器状态归零，
      * 否则 Emby 会一直认为该设备处于播放中，无法取消投屏或切换到新文件。
      */
-    private fun reportPlaybackStopped() {
+    private fun reportPlaybackStopped(endCastSession: Boolean = false) {
+        if (castToken != null) {
+            reportCastState("IDLE", castIdleReason ?: "CANCELLED", endSession = endCastSession)
+            return
+        }
         val intent = Intent(ACTION_PLAYBACK_STOPPED).apply {
             setPackage(packageName)
         }
         sendBroadcast(intent)
     }
 
+    private fun reportCastState(forcedState: String? = null, reason: String? = null, endSession: Boolean = false) {
+        val token = castToken ?: return
+        val current = player
+        if (forcedState == null && current?.currentMediaItem?.mediaId != token) return
+        val state = forcedState ?: when {
+            current?.playerError != null -> "IDLE"
+            current?.playbackState == Player.STATE_ENDED -> "IDLE"
+            current?.playbackState == Player.STATE_BUFFERING -> "BUFFERING"
+            current?.playbackState == Player.STATE_READY -> if (current.playWhenReady) "PLAYING" else "PAUSED"
+            else -> "IDLE"
+        }
+        if (reason != null) castIdleReason = reason
+        else if (current?.playerError != null) castIdleReason = "ERROR"
+        else if (current?.playbackState == Player.STATE_ENDED) castIdleReason = "FINISHED"
+        sendBroadcast(Intent(CastPlayerBridge.ACTION_STATE).setPackage(packageName).apply {
+            putExtra(CastPlayerBridge.TOKEN, token)
+            putExtra(CastPlayerBridge.SESSION_ENDED, endSession)
+            putExtra("state", state)
+            putExtra("position", current?.currentPosition?.coerceAtLeast(0) ?: 0L)
+            putExtra("duration", current?.duration?.takeIf { it > 0 } ?: 0L)
+            putExtra("idle_reason", if (state == "IDLE") castIdleReason else null)
+            putExtra(CastPlayerBridge.VOLUME, current?.volume ?: 1f)
+        })
+    }
+
     override fun onDestroy() {
+        screenOnSessionActive = false
+        isPlayerVisible = false
         cropSession++ // 丢弃退出前尚未返回的取帧结果。
         super.onDestroy()
         try {
@@ -1431,7 +1557,7 @@ class PlayerActivity : AppCompatActivity() {
         mirrorTextureSurface = null
         player?.release()
         player = null
-        reportPlaybackStopped()
+        reportPlaybackStopped(endCastSession = isFinishing && !castStoppedBySender)
         Timber.i("PlayerActivity destroyed")
     }
 
@@ -1468,7 +1594,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra("miracast", isMiracastSession)
             })
         }
-        stopPlayback()
+        stopPlayback(endCastSession = true)
         exitPlayer()
     }
 }

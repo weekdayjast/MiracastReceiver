@@ -20,6 +20,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.weekd.miracastreceiver.R
+import com.weekd.miracastreceiver.cast.CastPlayerBridge
+import com.weekd.miracastreceiver.cast.GoogleCastReceiver
 import com.weekd.miracastreceiver.airplay.AirPlayCapabilities
 import com.weekd.miracastreceiver.airplay.fitMirrorResolution
 import com.weekd.miracastreceiver.airplay.AirPlayReceiver
@@ -58,6 +60,8 @@ class CastReceiverService : Service() {
 
     private lateinit var airPlayReceiver: AirPlayReceiver
     private lateinit var dlnaRenderer: DlnaMediaRenderer
+    private lateinit var castPlayerBridge: CastPlayerBridge
+    private lateinit var googleCastReceiver: GoogleCastReceiver
     private lateinit var ssdpServer: SsdpServer
     private lateinit var upnpHttpServer: UpnpHttpServer
     private lateinit var wfdServer: WfdServer
@@ -76,6 +80,7 @@ class CastReceiverService : Service() {
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             when (intent?.action) {
+                CastPlayerBridge.ACTION_STATE -> castPlayerBridge.onState(intent)
                 "com.weekd.miracastreceiver.DISCONNECT_SENDER" -> {
                     if (intent.getBooleanExtra("miracast", false)) {
                         wfdServer.disconnectSender()
@@ -175,7 +180,10 @@ class CastReceiverService : Service() {
 
         // 初始化 DLNA/UPnP 服务
         initDlnaServices()
+        castPlayerBridge = CastPlayerBridge(this)
+        googleCastReceiver = GoogleCastReceiver(this, deviceName, deviceUuid, castPlayerBridge.session)
         val playerStateFilter = IntentFilter().apply {
+            addAction(CastPlayerBridge.ACTION_STATE)
             addAction("com.weekd.miracastreceiver.DISCONNECT_SENDER")
             addAction(ACTION_UPDATE_POSITION)
             addAction(ACTION_PLAYBACK_STOPPED)
@@ -455,6 +463,7 @@ class CastReceiverService : Service() {
         // 启动 DLNA/UPnP 服务
         upnpHttpServer.start()
         ssdpServer.start()
+        googleCastReceiver.start()
 
         // 启动 Windows 无线显示器（Miracast/WFD）
         // 先建 P2P 组，再注入 WFD IE —— 顺序反了的话建组会覆盖掉刚设的 IE。
@@ -466,7 +475,7 @@ class CastReceiverService : Service() {
         }
         wfdServer.start()
 
-        Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD)")
+        Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD + experimental Google Cast)")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -502,6 +511,8 @@ class CastReceiverService : Service() {
         // 停止 DLNA/UPnP 服务
         ssdpServer.stop()
         upnpHttpServer.stop()
+        googleCastReceiver.stop()
+        castPlayerBridge.stop()
 
         shutdownMiracast()
     }
