@@ -1,0 +1,92 @@
+name: 故障反馈 / Bug report
+description: 投屏连接、黑屏、播放、崩溃、屏保等故障，请提供设备、步骤及接收端日志。
+title: "[故障] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈！请先搜索已有 Issue，并填写以下信息。
+        **播放设备 / 接收端**是安装 Miracast Receiver 的电视或盒子，**投屏设备 / 发送端**是发起投屏的手机或电脑。
+        请按 [ADB 故障日志采集教程](https://github.com/weekdayjast/MiracastReceiver/blob/main/ADB故障日志采集教程.md) 在复现前开始记录，出现问题后保留现场再导出状态。
+        日志上传前请检查并遮蔽账号、密码、令牌、私人媒体地址等隐私。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题描述与预期结果
+      description: 实际发生了什么？正常情况下应该怎样？请区分黑屏、无声音、连接失败、断开、回桌面或进入屏保等现象。
+      placeholder: "实际现象：\n预期结果："
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Miracast Receiver 版本与安装包
+      description: 填写应用版本、APK 文件名 / 架构、下载来源，注明正式版还是 Debug / 诊断版。
+      placeholder: "例如：v1.2.11，universal，GitHub Releases 正式版"
+    validations:
+      required: true
+  - type: textarea
+    id: receiver
+    attributes:
+      label: 播放设备（接收端）
+      description: 安装本应用的电视 / 盒子 / 安卓设备，填写品牌、完整型号、Android 版本及厂商系统 / 固件版本。
+      placeholder: "品牌和型号：\nAndroid 版本：\n厂商系统 / 固件版本："
+    validations:
+      required: true
+  - type: textarea
+    id: sender
+    attributes:
+      label: 投屏设备（发送端）
+      description: 手机 / 平板 / 电脑的品牌型号、系统版本，以及发送应用名称和版本。
+      placeholder: "品牌和型号：\n系统版本：\n发送应用与版本（系统投屏则注明）："
+    validations:
+      required: true
+  - type: dropdown
+    id: protocol
+    attributes:
+      label: 投屏方式
+      options:
+        - AirPlay 屏幕镜像
+        - AirPlay 视频 / 音频
+        - DLNA / UPnP（视频应用投屏）
+        - Miracast / 安卓系统无线显示
+        - Windows 无线显示（Win+K）
+        - Google Cast（如 VLC 投屏）
+        - 不确定 / 其他（在复现步骤说明入口）
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤、频率及故障时间
+      description: 从打开应用开始逐步描述，注明按了哪个投屏入口、多久出问题。分辨率切换请写明应用及切换入口；屏保请注明等待时长和是否有遥控操作。
+      placeholder: "1. \n2. \n3. \n复现频率（每次 / 偶发）：\n故障时间（接收设备时间，方便对应日志）："
+    validations:
+      required: true
+  - type: textarea
+    id: network
+    attributes:
+      label: 网络环境
+      description: 双方使用 Wi-Fi 还是网线、是否同一局域网，是否开启访客网络 / AP 隔离 / VPN，投屏期间是否切换网络。
+      placeholder: "接收端：\n发送端：\n同一局域网及其他网络设置："
+    validations:
+      required: true
+  - type: textarea
+    id: media
+    attributes:
+      label: 媒体来源与对比测试
+      description: 如涉及媒体播放，说明本地 / HTTP / SMB / NFS / 直播、格式编码（知道再填）、发送端能否单独播放、其他普通 MP4 是否正常。请勿公开密码或私人媒体链接。
+      placeholder: "来源及格式：\n发送端本地播放：\n其他文件 / 其他发送应用结果：\n上次正常的版本（如有）："
+  - type: textarea
+    id: receiver-logs
+    attributes:
+      label: 播放设备 ADB 日志与现场状态
+      description: 按教程上传接收端 logcat 和现场状态 ZIP，并注明故障时间。可将 ZIP 拖入此处；若无法采集，请填写连接失败的原因及提示。
+      placeholder: "将日志 ZIP 拖到这里上传。\n日志对应的故障时间：\n若暂时无法采集，原因和报错："
+    validations:
+      required: true
+  - type: textarea
+    id: attachments
+    attributes:
+      label: 截图、录屏及其他补充
+      description: 可上传现象截图 / 短视频、发送端日志，说明是否仅某台设备或某个版本出现。iPhone 无法用 ADB 采集，不要求提供 ADB 日志。

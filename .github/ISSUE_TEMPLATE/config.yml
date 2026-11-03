@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: ADB 故障日志采集教程
+    url: https://github.com/weekdayjast/MiracastReceiver/blob/main/ADB故障日志采集教程.md
+    about: 复现前开始记录，故障发生后采集接收设备日志和现场状态。
