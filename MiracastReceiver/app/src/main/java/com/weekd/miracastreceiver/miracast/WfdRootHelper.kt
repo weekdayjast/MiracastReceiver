@@ -16,6 +16,7 @@ import java.io.File
  * 没有 root 时全部方法安全失败并返回 false —— Miracast 发现不了，其余投屏方式不受影响。
  */
 object WfdRootHelper {
+    enum class AdvertiseResult { COMMAND_SENT, ROOT_UNAVAILABLE, HELPER_MISSING, SOCKET_UNAVAILABLE, COMMAND_FAILED }
 
     private const val BINARY_NAME = "libwfdctl.so"
 
@@ -43,17 +44,21 @@ object WfdRootHelper {
      * @param controlPort 我们在 IE 里宣告的 RTSP 控制端口（WFD 标准 7236）
      * @return 是否成功执行（不代表 Windows 一定能发现，还取决于驱动是否支持 sink 模式）
      */
-    fun advertiseSink(context: Context, controlPort: Int = 7236): Boolean {
+    fun advertiseSink(context: Context, controlPort: Int = 7236): Boolean =
+        advertiseSinkResult(context, controlPort) == AdvertiseResult.COMMAND_SENT
+
+    fun advertiseSinkResult(context: Context, controlPort: Int = 7236): AdvertiseResult {
+        if (!isRootAvailable()) return AdvertiseResult.ROOT_UNAVAILABLE
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) {
             Timber.w("WFD: $BINARY_NAME not found in nativeLibraryDir")
-            return false
+            return AdvertiseResult.HELPER_MISSING
         }
 
         val socketPath = CTRL_SOCKET_PATHS.firstOrNull { runAsRoot("ls $it") }
         if (socketPath == null) {
-            Timber.w("WFD: no wpa_supplicant control socket found (no root?)")
-            return false
+            Timber.w("WFD: no accessible wpa_supplicant control socket found")
+            return AdvertiseResult.SOCKET_UNAVAILABLE
         }
 
         val cmd = "${binary.absolutePath} $socketPath " +
@@ -62,10 +67,10 @@ object WfdRootHelper {
 
         return if (runAsRoot(cmd)) {
             Timber.i("WFD: sink IE injected via $socketPath (control port $controlPort)")
-            true
+            AdvertiseResult.COMMAND_SENT
         } else {
-            Timber.w("WFD: failed to inject sink IE — device may not be rooted")
-            false
+            Timber.w("WFD: sink IE command failed or timed out after root authorization")
+            AdvertiseResult.COMMAND_FAILED
         }
     }
 
@@ -78,17 +83,15 @@ object WfdRootHelper {
     }
 
     /** 设备是否可用 root（用于 UI 提示 Miracast 是否可能工作）。 */
-    fun isRootAvailable(): Boolean = runAsRoot("id")
+    fun isRootAvailable(): Boolean = runAsRoot("test \"$(id -u)\" = 0")
 
     private fun runAsRoot(command: String): Boolean = try {
         val process = ProcessBuilder("su", "-c", command)
             .redirectErrorStream(true)
             .start()
-        val output = process.inputStream.bufferedReader().readText().trim()
-        val exit = process.waitFor()
-        if (output.isNotEmpty()) Timber.d("WFD root: $output")
-        exit == 0
+        waitForRootCommand(process)
     } catch (e: Exception) {
+        if (e is InterruptedException) Thread.currentThread().interrupt()
         Timber.d("WFD root unavailable: ${e.message}")
         false
     }

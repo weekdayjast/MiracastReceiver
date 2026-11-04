@@ -39,6 +39,11 @@ class WifiDirectManager(
     private var channel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private var isStarted = false
+    enum class StartupState { STARTING, UNSUPPORTED, PERMISSION_REQUIRED, WIFI_DISABLED, FAILED }
+    var onStartupState: ((StartupState) -> Unit)? = null
+    var onWfdConfigured: (() -> Unit)? = null
+    var isWfdConfigured = false
+        private set
 
     var onDeviceConnected: ((WifiP2pDevice) -> Unit)? = null
     var onDeviceDisconnected: (() -> Unit)? = null
@@ -47,19 +52,24 @@ class WifiDirectManager(
     fun start() {
         if (isStarted) {
             Timber.w("Wi-Fi Direct already started")
+            // Retry group creation after the user grants Wi-Fi Direct permission.
+            createGroup()
             return
         }
 
         val p2p = manager
         if (p2p == null) {
+            onStartupState?.invoke(StartupState.UNSUPPORTED)
             Timber.w("本机不支持 Wi-Fi Direct，Miracast 不可用（AirPlay / DLNA 不受影响）")
             return
         }
 
         try {
+            onStartupState?.invoke(StartupState.STARTING)
             channel = p2p.initialize(context, Looper.getMainLooper(), null)
 
             if (channel == null) {
+                onStartupState?.invoke(StartupState.FAILED)
                 Timber.e("Failed to initialize Wi-Fi P2P channel")
                 return
             }
@@ -78,7 +88,11 @@ class WifiDirectManager(
 
             isStarted = true
             Timber.i("Wi-Fi Direct started for Miracast")
+        } catch (e: SecurityException) {
+            onStartupState?.invoke(StartupState.PERMISSION_REQUIRED)
+            Timber.w(e, "Wi-Fi Direct permission required")
         } catch (e: Exception) {
+            onStartupState?.invoke(StartupState.FAILED)
             Timber.e(e, "Failed to start Wi-Fi Direct")
         }
     }
@@ -122,6 +136,8 @@ class WifiDirectManager(
 
             setWFDInfoMethod.invoke(manager, ch, wfdInfo, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
+                    isWfdConfigured = true
+                    onWfdConfigured?.invoke()
                     Timber.i("✅ WFD Info set successfully! Windows should be able to discover this device now.")
                 }
 
@@ -164,6 +180,8 @@ class WifiDirectManager(
 
                             // 设置设备名称
                             setDeviceName(deviceName)
+                        } else {
+                            onStartupState?.invoke(StartupState.FAILED)
                         }
                     }
                 }
@@ -184,14 +202,21 @@ class WifiDirectManager(
                             if (group != null) {
                                 Timber.i("Existing group found: ${group.networkName}")
                                 onGroupCreated?.invoke(group)
+                            } else {
+                                onStartupState?.invoke(StartupState.FAILED)
                             }
                         }
+                    } else {
+                        onStartupState?.invoke(if (reason == WifiP2pManager.P2P_UNSUPPORTED)
+                            StartupState.UNSUPPORTED else StartupState.FAILED)
                     }
                 }
             })
         } catch (e: SecurityException) {
+            onStartupState?.invoke(StartupState.PERMISSION_REQUIRED)
             Timber.e(e, "Security exception when creating group - missing permissions?")
         } catch (e: Exception) {
+            onStartupState?.invoke(StartupState.FAILED)
             Timber.e(e, "Exception when creating group")
         }
     }
@@ -285,6 +310,7 @@ class WifiDirectManager(
                     WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
                         val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
                         val enabled = state == WifiP2pManager.WIFI_P2P_STATE_ENABLED
+                        if (!enabled) onStartupState?.invoke(StartupState.WIFI_DISABLED)
                         Timber.d("Wi-Fi P2P state changed: ${if (enabled) "ENABLED" else "DISABLED"}")
                     }
 

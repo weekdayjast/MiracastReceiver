@@ -100,6 +100,9 @@ static int ctrl_request(const char *cmd)
     if (n > 0) {
         reply[n] = '\0';
         printf("%s -> %s\n", cmd, reply);
+        /* An explicit rejection is different from an SELinux-blocked reply. */
+        if (strncmp(reply, "FAIL", 4) == 0 || strncmp(reply, "UNKNOWN COMMAND", 15) == 0)
+            return -1;
     } else {
         /* 回包被 SELinux 挡下时走这里，命令通常已生效 */
         printf("%s -> (sent, no reply)\n", cmd);

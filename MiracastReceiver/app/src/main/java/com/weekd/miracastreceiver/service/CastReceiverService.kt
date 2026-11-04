@@ -56,6 +56,8 @@ class CastReceiverService : Service() {
         /** 开机后等网络就绪的轮询间隔与最长等待时间。 */
         private const val NETWORK_RETRY_INTERVAL_MS = 5_000L
         private const val NETWORK_MAX_WAIT_MS = 5 * 60_000L
+        // Serialize root commands and cleanup without blocking the service/UI thread.
+        private val wfdRootExecutor = java.util.concurrent.Executors.newSingleThreadExecutor()
     }
 
     private lateinit var airPlayReceiver: AirPlayReceiver
@@ -76,6 +78,11 @@ class CastReceiverService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var networkWaitRunnable: Runnable? = null
     private var networkWaitElapsedMs = 0L
+    private var stopping = false
+    private var rootAdvertisingPending = false
+    private var rootAdvertisingAttempted = false
+    private var p2pFailure: ReceiverStatus.Miracast? = null
+    private var p2pGroupReady = false
 
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -114,6 +121,8 @@ class CastReceiverService : Service() {
     }
 
     override fun onCreate() {
+        ReceiverStatus.service = ReceiverStatus.Service.STARTING
+        ReceiverStatus.miracast = ReceiverStatus.Miracast.CHECKING
         super.onCreate()
         Timber.i("CastReceiverService created")
         createNotificationChannel()
@@ -241,8 +250,25 @@ class CastReceiverService : Service() {
 
         // 初始化 Wi-Fi Direct 以支持 Windows 无线显示器发现
         wifiDirectManager = WifiDirectManager(this, DeviceInfoProvider(this).getDeviceName()).apply {
+            onStartupState = stateChanged@{ state ->
+                if (stopping) return@stateChanged
+                p2pFailure = when (state) {
+                    WifiDirectManager.StartupState.STARTING -> null
+                    WifiDirectManager.StartupState.UNSUPPORTED -> ReceiverStatus.Miracast.UNSUPPORTED
+                    WifiDirectManager.StartupState.PERMISSION_REQUIRED -> ReceiverStatus.Miracast.PERMISSION_REQUIRED
+                    WifiDirectManager.StartupState.WIFI_DISABLED -> ReceiverStatus.Miracast.WIFI_DISABLED
+                    WifiDirectManager.StartupState.FAILED -> ReceiverStatus.Miracast.SETUP_FAILED
+                }
+                ReceiverStatus.miracast = p2pFailure ?: ReceiverStatus.Miracast.CHECKING
+            }
+            onWfdConfigured = {
+                if (!stopping && p2pGroupReady && p2pFailure == null) ReceiverStatus.miracast = ReceiverStatus.Miracast.ADVERTISING
+            }
             onGroupCreated = { group ->
                 Timber.i("Wi-Fi Direct group created for Miracast: ${group.networkName}")
+                p2pGroupReady = true
+                p2pFailure = null
+                advertiseMiracast()
             }
             onDeviceConnected = { device ->
                 Timber.i("Miracast device connected: ${device.deviceName}")
@@ -445,6 +471,7 @@ class CastReceiverService : Service() {
         }
 
         Timber.i("Network not ready yet, retry in ${NETWORK_RETRY_INTERVAL_MS}ms")
+        ReceiverStatus.service = ReceiverStatus.Service.WAITING_NETWORK
         val runnable = Runnable {
             networkWaitElapsedMs += NETWORK_RETRY_INTERVAL_MS
             startWhenNetworkReady()
@@ -466,19 +493,58 @@ class CastReceiverService : Service() {
         googleCastReceiver.start()
 
         // 启动 Windows 无线显示器（Miracast/WFD）
-        // 先建 P2P 组，再注入 WFD IE —— 顺序反了的话建组会覆盖掉刚设的 IE。
+        // Inject after onGroupCreated: createGroup is asynchronous and can overwrite WFD IE.
         wifiDirectManager.start()
-        if (WfdRootHelper.advertiseSink(this)) {
-            Timber.i("Miracast: 已作为 Wi-Fi Display Sink 对外广播，Windows 可发现")
-        } else {
-            Timber.w("Miracast: 未能注入 WFD IE（需要 root），Windows 无法发现本机")
-        }
+        mainHandler.postDelayed({
+            if (!stopping && ReceiverStatus.miracast == ReceiverStatus.Miracast.CHECKING) {
+                ReceiverStatus.miracast = ReceiverStatus.Miracast.SETUP_FAILED
+            }
+        }, 30_000L)
         wfdServer.start()
+        ReceiverStatus.service = ReceiverStatus.Service.RUNNING
 
         Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD + experimental Google Cast)")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun advertiseMiracast() {
+        if (stopping) return
+        if (wifiDirectManager.isWfdConfigured) {
+            ReceiverStatus.miracast = ReceiverStatus.Miracast.ADVERTISING
+            return
+        }
+        // This setting alone does not prove Sink capability. Report it as unverified,
+        // and allow systems with their own WFD advertising to work without root.
+        val systemEnabled = runCatching {
+            android.provider.Settings.Global.getInt(contentResolver, "wifi_display_on", 0) == 1
+        }.getOrDefault(false)
+        if (systemEnabled) {
+            ReceiverStatus.miracast = ReceiverStatus.Miracast.SYSTEM_MANAGED
+            return
+        }
+        if (rootAdvertisingPending) return
+        rootAdvertisingPending = true
+        rootAdvertisingAttempted = true
+        ReceiverStatus.miracast = ReceiverStatus.Miracast.CHECKING
+        val appContext = applicationContext
+        wfdRootExecutor.execute {
+            val result = runCatching { WfdRootHelper.advertiseSinkResult(appContext) }
+                .getOrDefault(WfdRootHelper.AdvertiseResult.COMMAND_FAILED)
+            mainHandler.post {
+                rootAdvertisingPending = false
+                if (!stopping) {
+                    ReceiverStatus.miracast = p2pFailure ?: when {
+                        wifiDirectManager.isWfdConfigured -> ReceiverStatus.Miracast.ADVERTISING
+                        result == WfdRootHelper.AdvertiseResult.COMMAND_SENT -> ReceiverStatus.Miracast.ADVERTISING
+                        result == WfdRootHelper.AdvertiseResult.ROOT_UNAVAILABLE -> ReceiverStatus.Miracast.ROOT_REQUIRED
+                        else -> ReceiverStatus.Miracast.SETUP_FAILED
+                    }
+                    Timber.i("Miracast startup: %s (%s)", ReceiverStatus.miracast, result)
+                }
+            }
+        }
+    }
 
     /** 用户从最近任务里划掉应用时也要断开投屏，否则发送端会以为连接还在。 */
     override fun onTaskRemoved(rootIntent: Intent?) {
@@ -489,6 +555,8 @@ class CastReceiverService : Service() {
     }
 
     override fun onDestroy() {
+        stopping = true
+        ReceiverStatus.service = ReceiverStatus.Service.STOPPED
         super.onDestroy()
         Timber.i("CastReceiverService destroyed")
 
@@ -524,8 +592,13 @@ class CastReceiverService : Service() {
      * 不主动撤销的话，应用关掉之后 Windows 依然能搜到这台设备并尝试连接。
      */
     private fun shutdownMiracast() {
+        stopping = true
         runCatching { wfdServer.stop() }
-        runCatching { WfdRootHelper.stopAdvertising(this) }
+        if (rootAdvertisingAttempted) {
+            rootAdvertisingAttempted = false
+            val appContext = applicationContext
+            wfdRootExecutor.execute { runCatching { WfdRootHelper.stopAdvertising(appContext) } }
+        }
         runCatching { wifiDirectManager.stop() }
     }
 

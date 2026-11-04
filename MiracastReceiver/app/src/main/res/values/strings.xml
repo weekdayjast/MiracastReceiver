@@ -19,6 +19,17 @@
     <string name="status_no_network">No network connection</string>
     <string name="status_no_wifi">Not connected to Wi-Fi</string>
     <string name="status_service_starting">Starting service…</string>
+    <string name="status_waiting_network">Waiting for a network address. Check the network connection.</string>
+    <string name="status_receiver_running">Receiver service is running. Waiting for a connection.</string>
+    <string name="status_receiver_stopped">Receiver service is stopped. Reopen the app to retry.</string>
+    <string name="status_miracast_checking">Checking Windows / Android screen mirroring…</string>
+    <string name="status_miracast_advertising">Miracast discovery configured. On Windows press Win+K; on Android open wireless display. Discovery also depends on the device driver.</string>
+    <string name="status_miracast_system">System Wi-Fi Display is enabled. If the device is missing from Win+K, open the system screen mirroring receiver and try again; this switch alone does not confirm receiving support.</string>
+    <string name="status_miracast_root_required">Windows / Android screen mirroring is unavailable: root access was not granted. If this device has a system screen mirroring receiver, enable it first; otherwise root is required to enable discovery. AirPlay, DLNA and VLC Cast can still be used.</string>
+    <string name="status_miracast_failed">Windows / Android screen mirroring could not be configured. Check system screen mirroring, Wi-Fi Direct support and root authorization, then reopen the app to retry. Please include ADB logs if it still fails. Other casting methods can still be used.</string>
+    <string name="status_miracast_unsupported">This device does not provide Wi-Fi Direct, which Windows / Android screen mirroring requires. Use AirPlay, DLNA or VLC Cast.</string>
+    <string name="status_miracast_permission">Windows / Android screen mirroring needs the Nearby devices or Location permission. Grant it in system app settings and reopen the app.</string>
+    <string name="status_miracast_wifi_disabled">Windows / Android screen mirroring needs Wi-Fi Direct. Enable Wi-Fi and reopen the app; an Ethernet connection alone is not enough.</string>
     <string name="status_permission_denied">Location permission not granted. Windows wireless casting is unavailable.</string>
 
     <!-- 悬浮窗权限 -->

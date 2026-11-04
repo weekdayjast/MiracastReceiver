@@ -20,6 +20,7 @@ import com.weekd.miracastreceiver.R
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.discovery.MdnsAdvertiser
 import com.weekd.miracastreceiver.service.CastReceiverService
+import com.weekd.miracastreceiver.service.ReceiverStatus
 import com.weekd.miracastreceiver.util.AppLanguage
 import com.weekd.miracastreceiver.util.AppSettings
 import com.weekd.miracastreceiver.utils.NetworkUtils
@@ -27,6 +28,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import timber.log.Timber
 import android.widget.TextView
+import android.widget.ProgressBar
 
 /**
  * 主 Activity - 等待投屏连接
@@ -39,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvDeviceName: TextView
     private lateinit var tvDeviceIp: TextView
     private lateinit var tvStatus: TextView
+    private lateinit var tvMiracastStatus: TextView
+    private lateinit var startupProgress: ProgressBar
     private lateinit var switchAutoStart: SwitchCompat
     private lateinit var switchReturnToApp: SwitchCompat
     private lateinit var tvLanguageValue: TextView
@@ -172,6 +176,8 @@ class MainActivity : AppCompatActivity() {
         tvDeviceName = findViewById(R.id.tv_device_name)
         tvDeviceIp = findViewById(R.id.tv_device_ip)
         tvStatus = findViewById(R.id.tv_status)
+        tvMiracastStatus = findViewById(R.id.tv_miracast_status)
+        startupProgress = findViewById(R.id.startup_progress)
         switchAutoStart = findViewById(R.id.switch_auto_start)
         findViewById<SwitchCompat>(R.id.switch_auto_rotate).apply {
             isChecked = AppSettings.isAutoRotateToFit(this@MainActivity)
@@ -230,7 +236,6 @@ class MainActivity : AppCompatActivity() {
         if (!NetworkUtils.isNetworkAvailable(this)) {
             tvStatus.text = getString(R.string.status_no_network)
             Timber.w("Network not available")
-            return
         }
 
         if (!NetworkUtils.isWifiConnected(this)) {
@@ -284,11 +289,29 @@ class MainActivity : AppCompatActivity() {
     private fun updateStatus() {
         lifecycleScope.launch {
             while (true) {
-                if (mdnsAdvertiser.isAdvertising()) {
-                    tvStatus.text = getString(R.string.waiting_connection)
-                } else {
-                    tvStatus.text = getString(R.string.status_service_starting)
-                }
+                val service = ReceiverStatus.service
+                val miracast = ReceiverStatus.miracast
+                tvStatus.setText(when (service) {
+                    ReceiverStatus.Service.STARTING -> R.string.status_service_starting
+                    ReceiverStatus.Service.WAITING_NETWORK -> R.string.status_waiting_network
+                    ReceiverStatus.Service.RUNNING -> R.string.status_receiver_running
+                    ReceiverStatus.Service.STOPPED -> R.string.status_receiver_stopped
+                })
+                tvMiracastStatus.visibility = if (service == ReceiverStatus.Service.RUNNING) View.VISIBLE else View.GONE
+                tvMiracastStatus.setText(when (miracast) {
+                    ReceiverStatus.Miracast.CHECKING -> R.string.status_miracast_checking
+                    ReceiverStatus.Miracast.ADVERTISING -> R.string.status_miracast_advertising
+                    ReceiverStatus.Miracast.SYSTEM_MANAGED -> R.string.status_miracast_system
+                    ReceiverStatus.Miracast.ROOT_REQUIRED -> R.string.status_miracast_root_required
+                    ReceiverStatus.Miracast.SETUP_FAILED -> R.string.status_miracast_failed
+                    ReceiverStatus.Miracast.UNSUPPORTED -> R.string.status_miracast_unsupported
+                    ReceiverStatus.Miracast.PERMISSION_REQUIRED -> R.string.status_miracast_permission
+                    ReceiverStatus.Miracast.WIFI_DISABLED -> R.string.status_miracast_wifi_disabled
+                })
+                startupProgress.visibility = if (service == ReceiverStatus.Service.STARTING ||
+                    service == ReceiverStatus.Service.WAITING_NETWORK ||
+                    (service == ReceiverStatus.Service.RUNNING && miracast == ReceiverStatus.Miracast.CHECKING))
+                    View.VISIBLE else View.GONE
                 delay(2000)
             }
         }
