@@ -7,7 +7,7 @@
 
 > **先确认你的电视是否需要 root。** 系统自带「屏幕镜像」功能的电视（实测 Sony BRAVIA 4K VH22 / Android 12）
 > 系统本身已在广播 WFD IE，本应用无需 root 即可接管 Miracast 会话，Windows 和安卓手机都能直接发现。
-> 判断方法：`adb shell settings get global wifi_display_on` 返回 `1` 即属于此类，不必继续阅读本文。
+> 先按下文第一步检查 Wi-Fi Display 开关；如果系统已提供接收功能，且 Windows 能发现并连接本应用，则无需继续 root 配置。
 > 连接时电视上弹出的「是否允许连接」确认框是系统的 Wi-Fi Direct 授权流程，确认即可。
 
 ## 为什么（系统不带屏幕镜像的设备）必须 root
@@ -31,9 +31,23 @@ SecurityException: Wifi Display Permission denied for uid = 10392
 
 ## 设备前置条件
 
-逐项确认，任何一条不满足都无法工作：
+先检查系统是否已开启 Wi-Fi Display；需要使用 root 注入时，再确认后续条件：
 
-**1. 有可用的 root**
+**1. 检测是否开启 Wi-Fi Display（无需 root）**
+
+```bash
+adb shell settings get global wifi_display_on
+```
+
+- 返回 `1`：系统 Wi-Fi Display 开关已开启。先启动本应用，再用 Windows `Win + K` 检查能否发现并连接；系统具备接收功能且连接正常时，无需 root。
+- 返回 `0`：该开关未开启。如果系统设置中有「屏幕镜像 / 无线显示 / Miracast」接收入口，先开启后重新检测。
+- 返回 `null`：系统未设置此项，不能仅凭此值判断设备不支持 Wi-Fi Display，请结合厂商的屏幕镜像设置和实际发现结果确认。
+
+这个设置值只反映系统开关，不能单独证明设备具备接收能力或已成功广播 WFD IE。如果系统没有可用的接收功能，再继续检查以下 root 注入条件。
+
+连接多个 ADB 设备时，使用 `adb -s 设备序列号 shell settings get global wifi_display_on` 指定接收设备。
+
+**2. 有可用的 root**
 
 ```bash
 adb shell "su -c 'id'"
@@ -41,7 +55,7 @@ adb shell "su -c 'id'"
 
 期望输出包含 `uid=0(root)`。
 
-**2. wpa_supplicant 编译了 Wi-Fi Display 支持**
+**3. wpa_supplicant 编译了 Wi-Fi Display 支持**
 
 ```bash
 adb shell "su -c 'grep -ac WFD_SUBELEM /vendor/bin/hw/wpa_supplicant'"
@@ -49,7 +63,7 @@ adb shell "su -c 'grep -ac WFD_SUBELEM /vendor/bin/hw/wpa_supplicant'"
 
 返回非 0 即表示支持。旧机型的 `wpa_supplicant` 可能在 `/system/bin/` 下。
 
-**3. 存在 wpa_supplicant 控制 socket**
+**4. 存在 wpa_supplicant 控制 socket**
 
 ```bash
 adb shell "su -c 'ls /data/misc/wifi/sockets/ /data/vendor/wifi/wpa/sockets/ 2>/dev/null'"
