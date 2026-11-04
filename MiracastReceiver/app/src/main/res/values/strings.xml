@@ -109,4 +109,19 @@
     <string name="notification_channel_description">Keeps the cast receiver service running</string>
     <string name="notification_waiting">Waiting for AirPlay / DLNA / Miracast connections</string>
     <string name="notification_stop_cast">Stop casting</string>
+    <string name="castplus_enable">Huawei Cast+ receiver (experimental)</string>
+    <string name="castplus_off">Cast+ is off. Enable it to test wireless projection from a Huawei phone.</string>
+    <string name="castplus_unsupported">Cast+ requires Android 6 or later and an ARM device.</string>
+    <string name="castplus_permission">Cast+ needs Location and, on Android 13+, Nearby devices permission. Grant them and reopen the app.</string>
+    <string name="castplus_starting">Starting Cast+ receiver…</string>
+    <string name="castplus_ready">Cast+ receiver ready. On the Huawei phone, open wireless projection.</string>
+    <string name="castplus_pairing">Cast+ is waiting for connection confirmation or a PIN.</string>
+    <string name="castplus_connecting">Connecting to the Huawei phone…</string>
+    <string name="castplus_playing">Huawei Cast+ is displaying the phone screen.</string>
+    <string name="castplus_paused">Huawei Cast+ is paused.</string>
+    <string name="castplus_disconnecting">Disconnecting Huawei Cast+…</string>
+    <string name="castplus_error">Cast+ could not start or the connection failed. Turn Cast+ off and on to retry; include receiver ADB logs if it still fails.</string>
+    <string name="castplus_request">%1$s wants to connect using Huawei Cast+.</string>
+    <string name="castplus_pin">Enter this PIN on the phone: %1$s</string>
+    <string name="castplus_exit">Stop casting</string>
 </resources>

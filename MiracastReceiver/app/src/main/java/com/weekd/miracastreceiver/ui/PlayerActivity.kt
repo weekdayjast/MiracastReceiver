@@ -67,6 +67,7 @@ import java.net.URL
 class PlayerActivity : AppCompatActivity() {
 
     companion object {
+        const val ACTION_REPLACED = "com.weekd.miracastreceiver.PLAYBACK_REPLACED"
         const val EXTRA_MEDIA_URI = "media_uri"
         const val EXTRA_MEDIA_TITLE = "media_title"
         const val EXTRA_MEDIA_URIS = "media_uris"
@@ -193,6 +194,11 @@ class PlayerActivity : AppCompatActivity() {
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == ACTION_REPLACED) {
+                stopPlayback(endCastSession = true)
+                finish() // Do not finishAffinity: a new protocol player is taking over.
+                return
+            }
             if (intent?.action == CastPlayerBridge.ACTION_COMMAND) {
                 if (castToken == null || intent.getStringExtra(CastPlayerBridge.TOKEN) != castToken) return
                 val value = intent.getDoubleExtra(CastPlayerBridge.VALUE, 0.0)
@@ -569,6 +575,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        com.weekd.miracastreceiver.castplus.CastPlusReceiver.current?.end()
         val nextCastToken = if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "CAST")
             intent.getStringExtra(CastPlayerBridge.TOKEN) else null
         if (castToken != null && castToken != nextCastToken) reportCastState("IDLE", "INTERRUPTED", endSession = true)
@@ -1403,6 +1410,7 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun registerControlReceiver() {
         val filter = IntentFilter().apply {
+            addAction(ACTION_REPLACED)
             addAction(ACTION_PLAY)
             addAction(CastPlayerBridge.ACTION_COMMAND)
             addAction(ACTION_PAUSE)

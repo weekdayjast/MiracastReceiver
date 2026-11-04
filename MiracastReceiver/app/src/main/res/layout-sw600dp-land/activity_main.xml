@@ -207,6 +207,8 @@
                 android:textSize="20sp" />
 
 
+            <include layout="@layout/setting_castplus" />
+
             <!-- 设置：界面语言 -->
             <LinearLayout
                 android:id="@+id/setting_language"

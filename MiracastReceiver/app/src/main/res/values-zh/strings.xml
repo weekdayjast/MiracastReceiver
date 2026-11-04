@@ -106,4 +106,19 @@
     <string name="status_miracast_unsupported">此设备未提供 Wi-Fi Direct，无法使用 Windows / 安卓屏幕镜像。可改用 AirPlay、DLNA 或 VLC 投屏。</string>
     <string name="status_miracast_permission">Windows / 安卓屏幕镜像需要“附近的设备”或定位权限。请在系统应用设置中允许后重新打开应用。</string>
     <string name="status_miracast_wifi_disabled">Windows / 安卓屏幕镜像需要 Wi-Fi Direct。请开启 Wi-Fi 后重新打开应用，仅连接网线不足以使用此功能。</string>
+    <string name="castplus_enable">华为 Cast+ 接收（实验性）</string>
+    <string name="castplus_off">Cast+ 已关闭，开启后可测试华为手机的系统无线投屏。</string>
+    <string name="castplus_unsupported">Cast+ 需要 Android 6 或更高版本及 ARM 设备。</string>
+    <string name="castplus_permission">Cast+ 需要定位权限，Android 13 及以上还需“附近的设备”权限。请允许后重新打开应用。</string>
+    <string name="castplus_starting">正在启动 Cast+ 接收…</string>
+    <string name="castplus_ready">Cast+ 接收已就绪，请在华为手机上打开无线投屏。</string>
+    <string name="castplus_pairing">Cast+ 正在等待连接确认或 PIN 配对。</string>
+    <string name="castplus_connecting">正在连接华为手机…</string>
+    <string name="castplus_playing">正在显示华为手机的 Cast+ 投屏画面。</string>
+    <string name="castplus_paused">华为 Cast+ 已暂停。</string>
+    <string name="castplus_disconnecting">正在断开华为 Cast+…</string>
+    <string name="castplus_error">Cast+ 启动或连接失败，请关闭后重新开启；仍失败请提供接收设备的 ADB 日志。</string>
+    <string name="castplus_request">设备 %1$s 请求通过华为 Cast+ 投屏。</string>
+    <string name="castplus_pin">请在手机上输入 PIN：%1$s</string>
+    <string name="castplus_exit">退出投屏</string>
 </resources>

@@ -7,6 +7,11 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="com.huawei.permission.HISIGHT_ACCESS" />
+    <uses-permission android:name="com.huawei.hms.kitframework.permission.BIND_ENGINE_FRAMEWORK_SERVICE" />
+    <uses-permission android:name="com.huawei.hms.kitframework.permission.REQUEST_AUTHENTICATION" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Wi-Fi Direct 需要定位权限。Android 12+ 只申请 FINE 会被系统拒绝，必须同时声明 COARSE。 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -38,6 +43,11 @@
     <uses-feature
         android:name="android.software.leanback"
         android:required="true" />
+
+    <queries>
+        <package android:name="com.huawei.hms.kitframework" />
+        <package android:name="com.huawei.dmsdpdevice" />
+    </queries>
 
     <application
         android:name=".MiracastApp"
@@ -76,6 +86,13 @@
 
         <!-- 连接确认 Activity -->
         <activity
+            android:name=".ui.CastPlusPlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
+            android:screenOrientation="sensorLandscape"
+            android:theme="@style/Theme.Leanback.Fullscreen" />
+
+        <activity
             android:name=".ui.ConnectActivity"
             android:exported="false"
             android:screenOrientation="landscape"
@@ -89,6 +106,13 @@
             android:foregroundServiceType="mediaPlayback|connectedDevice" />
 
         <!-- 开机自启：把接收服务拉起来，不打开界面 -->
+        <service android:name="com.huawei.hisight.service.PlayerSinkService"
+            android:enabled="true" android:exported="false" />
+        <!-- This SDK service kills its own process in onDestroy. Never put it in the UI process. -->
+        <service android:name="com.huawei.connection.service.NearFieldManagerService"
+            android:enabled="true" android:exported="false" android:process=":castplus_nearby" />
+        <meta-data android:name="version" android:value="1" />
+
         <receiver
             android:name=".receiver.BootReceiver"
             android:enabled="true"

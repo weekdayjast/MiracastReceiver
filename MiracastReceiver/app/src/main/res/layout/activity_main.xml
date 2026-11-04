@@ -170,6 +170,8 @@
             android:textColor="@color/text_primary"
             android:textSize="16sp" />
 
+        <include layout="@layout/setting_castplus" />
+
         <LinearLayout
             android:id="@+id/setting_language"
             android:layout_width="match_parent"

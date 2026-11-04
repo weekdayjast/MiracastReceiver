@@ -145,6 +145,7 @@ cd MiracastReceiver
 
 ### 📖 文档
 
+- [华为 Cast+ 实验性接收](MiracastReceiver/HUAWEI-CASTPLUS.md) - 此分支的启用方式、实现范围和验证清单
 - [ADB 故障日志采集教程](ADB故障日志采集教程.md) - 故障复现、电视 / 盒子日志采集与 Issue 反馈要求
 - [开发与调试指南](开发与调试指南.md) - 完整的开发、打包、安装和调试说明
 - [Windows 无线投屏 Root 配置说明](Windows无线投屏Root配置说明.md) - Miracast 启用步骤、协议实现要点与排错

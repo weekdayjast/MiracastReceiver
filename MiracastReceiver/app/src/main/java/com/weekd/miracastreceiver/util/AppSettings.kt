@@ -26,6 +26,11 @@ object AppSettings {
     fun unobserve(context: Context, listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
         prefs(context).unregisterOnSharedPreferenceChangeListener(listener)
 
+    fun isCastPlusEnabled(context: Context): Boolean = prefs(context).getBoolean("castplus_enabled", false)
+    fun setCastPlusEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("castplus_enabled", enabled).apply()
+    }
+
     fun isAutoRotateToFit(context: Context): Boolean = prefs(context).getBoolean("auto_rotate_to_fit", false)
 
     fun setAutoRotateToFit(context: Context, enabled: Boolean) {
