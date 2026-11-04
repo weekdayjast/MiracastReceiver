@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Cast+ 해상도를 업데이트했습니다. 전송을 중지하고 다시 연결하여 새 해상도를 적용하세요.</string>
+    <string name="castplus_resolution_failed">Cast+ 해상도를 업데이트하지 못했습니다. 회전 각도는 저장했으며 연결 해제 시 다시 시도합니다.</string>
+</resources>

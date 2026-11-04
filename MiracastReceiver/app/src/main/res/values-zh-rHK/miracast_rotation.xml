@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Miracast 旋轉角度已儲存，請停止投放後重新連線，以協商旋轉後的解析度。自訂解析度需傳送端支援。</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="connect_card_padding">20dp</dimen>
+    <dimen name="connect_title_size">20sp</dimen>
+    <dimen name="connect_body_size">16sp</dimen>
+    <dimen name="connect_pin_size">24sp</dimen>
+    <dimen name="connect_button_size">16sp</dimen>
+</resources>

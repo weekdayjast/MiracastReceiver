@@ -16,6 +16,7 @@
 
 - 开关、后台接收服务统一启停，20 秒初始化超时，SDK 失败状态显示。
 - 注册设备名与显示能力、通用认证模式；不依赖蓝牙设备名。
+- 显示能力使用接收设备当前显示模式的实际像素尺寸；播放页每旋转 90° 会交换声明宽高，并保存角度。视频分辨率按硬件解码能力等比回退，不再使用固定方形画布。SDK 更新能力缓存后，需停止投屏并重新连接才能重新协商；实际流分辨率以发送端选择及回调为准。
 - 临时允许 / 始终允许 / 拒绝、PIN 展示、配对超时。
 - 连接后启动独立 Cast+ 播放页，原有镜像和 ExoPlayer 页面退出；其他协议打开播放页时断开 Cast+。
 - Surface 与 SDK 解码就绪必须同时满足才播放；支持先收到回调、先创建 Surface 两种顺序。
@@ -63,3 +64,13 @@ JAR 存在大量缺少 stack map 的 D8 警告；应保留原始二进制并结�
 来源和哈希见 [SDK 说明](app/libs/CASTPLUS-SDK.md)。反编译及初步可行性分析见 [分析文档](HUAWEI-CASTPLUS-ANALYSIS.md)；其中“尚未接入”的描述针对分析当时的状态，当前分支的实现以本文为准。
 
 SDK 二进制的可再分发条件尚未确认，本轮仅做分支集成和本地构建，不创建公开 Release。
+
+### Android 11+ 网络发现兼容
+
+目标 API 固定为 36，已移除 API 29 诊断构建开关。旧版 SDK 重复使用 Java 网络通知和 native `SmartGenius` 的 NETLINK_ROUTE 监听。Android 11+ 禁止现代目标版本普通应用绑定该 netlink socket，导致 SDK 输出 `bind for netlink socket failed: 13`、`NSTACK_Init fail` 和 `start listen failed`。上层 `setDiscoverable(true)` 的返回值仅代表请求接受。
+
+`castplus_network_compat.c` 通过 Android 链接器支持的 `DF_1_GLOBAL` 符号优先级，只替代 SDK 的 `SmartGeniusInit` / `SmartGeniusClean` 两个监听入口。Android 11+ 在 Application 中先于 SDK 加载，包含主进程和 `:castplus_nearby` 进程。网络地址、掩码和变化继续通过 SDK 的 Java 网络通知传入原有 native 发现模块。更早系统保留原实现。SDK JAR、原始 so、socket/bind、发现协议、认证和播放均不修改。
+
+验证：Sony 116（Android 12）已安装 API 36 修复包，日志确认兼容入口被调用，并出现 `Register device success`、`RegisterModule OK`、`succeeded to StartListening`。每次升级 SDK 都需重新核验这两个入口的 ABI、PLT 重定位，以及 Java 网络通知路径；该适配层依赖当前记录的 SDK 版本。SDK 的 `setsockopt fail, errno = 1` 在 API 29 可正常发现版本中同样存在，随后继续注册，不能单独当作发现失败。用户已在此 API 36 修复包确认手机能够发现并成功投屏。网络断开重连、不同手机和系统版本仍应作为实机回归项目。
+
+参考：[Android 网络接口限制](https://developer.android.com/identity/user-data-ids#mac-11-plus)、[Android 链接器符号查找顺序](https://android.googlesource.com/platform/bionic/+/master/android-changes-for-ndk-developers.md#changes-to-library-search-order)。

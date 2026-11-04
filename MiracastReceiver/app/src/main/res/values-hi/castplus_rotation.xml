@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Cast+ रिज़ॉल्यूशन अपडेट हो गया। नया रिज़ॉल्यूशन लागू करने के लिए कास्टिंग रोककर फिर कनेक्ट करें।</string>
+    <string name="castplus_resolution_failed">Cast+ रिज़ॉल्यूशन अपडेट नहीं हुआ। घुमाव सहेज लिया गया है; कनेक्शन बंद होने पर फिर कोशिश होगी।</string>
+</resources>

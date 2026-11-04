@@ -10,6 +10,44 @@ import android.content.Context
  */
 object AppSettings {
     const val KEY_RECEIVER_NAME = "receiver_name"
+    const val KEY_AIRPLAY_PORTRAIT_DISPLAY = "airplay_portrait_display"
+
+    fun getMiracastManualRotation(context: Context): Int = prefs(context).getInt("miracast_manual_rotation", 0)
+    fun isMiracastPortraitDisplay(context: Context): Boolean = prefs(context).getBoolean("miracast_portrait_display", false)
+
+    fun setMiracastRotation(context: Context, manual: Int, effective: Int): Boolean {
+        val portrait = effective % 180 != 0
+        val changed = isMiracastPortraitDisplay(context) != portrait
+        if (changed || getMiracastManualRotation(context) != manual) {
+            prefs(context).edit().putInt("miracast_manual_rotation", manual)
+                .putBoolean("miracast_portrait_display", portrait).apply()
+        }
+        return changed
+    }
+
+    fun getCastPlusRotation(context: Context): Int = prefs(context).getInt("castplus_rotation", 0)
+
+    fun setCastPlusRotation(context: Context, rotation: Int) {
+        require(rotation in listOf(0, 90, 180, 270))
+        prefs(context).edit().putInt("castplus_rotation", rotation).apply()
+    }
+
+    fun isAirPlayPortraitDisplay(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_AIRPLAY_PORTRAIT_DISPLAY, false)
+
+    fun getAirPlayManualRotation(context: Context): Int =
+        prefs(context).getInt("airplay_manual_rotation", 0)
+
+    /** Returns true when the declaration changes orientation and requires sender renegotiation. */
+    fun setAirPlayRotation(context: Context, manual: Int, effective: Int): Boolean {
+        val portrait = effective % 180 != 0
+        val changed = isAirPlayPortraitDisplay(context) != portrait
+        if (changed || getAirPlayManualRotation(context) != manual) {
+            prefs(context).edit().putBoolean(KEY_AIRPLAY_PORTRAIT_DISPLAY, portrait)
+                .putInt("airplay_manual_rotation", manual).apply()
+        }
+        return changed
+    }
 
     fun getReceiverName(context: Context): String =
         prefs(context).getString(KEY_RECEIVER_NAME, "") ?: ""

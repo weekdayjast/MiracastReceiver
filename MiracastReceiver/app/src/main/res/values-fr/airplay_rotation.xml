@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airplay_resolution_reconnect">Résolution AirPlay mise à jour. Arrêtez la recopie et reconnectez-vous pour négocier la nouvelle résolution.</string>
+</resources>

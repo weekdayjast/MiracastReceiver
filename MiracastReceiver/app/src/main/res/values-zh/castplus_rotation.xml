@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Cast+ 接收分辨率已更新，请停止投屏后重新连接，以协商新分辨率。</string>
+    <string name="castplus_resolution_failed">Cast+ 分辨率更新失败，旋转角度已保存，断开连接后将重试。</string>
+</resources>

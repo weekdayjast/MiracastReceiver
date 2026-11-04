@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Miracastの回転角度を保存しました。キャストを停止して再接続し、回転後の解像度を設定してください。カスタム解像度には送信側の対応が必要です。</string>
+</resources>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Miracast 旋转角度已保存，请停止投屏后重新连接，以协商旋转后的分辨率。自定义分辨率需发送端支持。</string>
+</resources>

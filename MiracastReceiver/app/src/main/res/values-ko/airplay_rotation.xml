@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airplay_resolution_reconnect">AirPlay 해상도를 업데이트했습니다. 미러링을 중지하고 다시 연결하여 새 해상도를 적용하세요.</string>
+</resources>

@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Miracast 회전 각도를 저장했습니다. 전송을 중지하고 다시 연결하여 회전한 해상도를 협상하세요. 사용자 지정 해상도는 송신 기기가 지원해야 합니다.</string>
+</resources>

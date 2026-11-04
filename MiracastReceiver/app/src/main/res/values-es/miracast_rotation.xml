@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Rotación Miracast guardada. Detén la transmisión y vuelve a conectar para negociar la resolución girada. El emisor debe admitir resoluciones personalizadas.</string>
+</resources>

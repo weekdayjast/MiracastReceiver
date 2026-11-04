@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airplay_resolution_reconnect">AirPlay resolution updated. Stop mirroring and reconnect to negotiate the new resolution.</string>
+</resources>

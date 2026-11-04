@@ -79,6 +79,14 @@ internal fun fitMirrorResolution(width: Int, height: Int, maxWidth: Int, maxHeig
     return maxOf(2, scaledWidth and -2) to maxOf(2, scaledHeight and -2)
 }
 
+/** Swap the declaration relative to the panel's stable native dimensions, never the previous declaration. */
+internal fun orientMirrorResolution(width: Int, height: Int, portrait: Boolean): Pair<Int, Int> {
+    require(width > 0 && height > 0)
+    val longEdge = maxOf(width, height)
+    val shortEdge = minOf(width, height)
+    return if (portrait) shortEdge to longEdge else longEdge to shortEdge
+}
+
 /** Capability queries concern coded dimensions, which can be larger than the display crop. */
 internal fun alignedVideoSize(width: Int, height: Int, widthAlignment: Int, heightAlignment: Int): Pair<Int, Int> {
     fun align(value: Int, alignment: Int): Int {

@@ -1,5 +1,7 @@
 package com.weekd.miracastreceiver.ui
 
+import com.weekd.miracastreceiver.util.VideoContent
+import com.weekd.miracastreceiver.util.applyVideoTextureTransform
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -610,11 +612,13 @@ class PlayerActivity : AppCompatActivity() {
         resetImageRotation()
         updateMirrorSurfaceTarget()
         if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "MIRACAST") {
+            manualRotationDegrees = com.weekd.miracastreceiver.util.AppSettings.getMiracastManualRotation(this)
             startMiracastPlayback(intent.getIntExtra(EXTRA_RTP_PORT, 0), intent.getStringExtra(EXTRA_SESSION_ID))
             return
         }
 
         if (intent?.getBooleanExtra(EXTRA_IS_AIRPLAY_MIRROR, false) == true) {
+            manualRotationDegrees = com.weekd.miracastreceiver.util.AppSettings.getAirPlayManualRotation(this)
             startAirPlayMirrorPlayback()
             return
         }
@@ -1175,6 +1179,14 @@ class PlayerActivity : AppCompatActivity() {
             autoRotationDegrees = 0
         }
         rotationDegrees = (autoRotationDegrees + manualRotationDegrees) % 360
+        if (isAirPlayMirrorSession && com.weekd.miracastreceiver.util.AppSettings.setAirPlayRotation(
+                this, manualRotationDegrees, rotationDegrees)) {
+            Toast.makeText(this, R.string.airplay_resolution_reconnect, Toast.LENGTH_LONG).show()
+        }
+        if (isMiracastSession && com.weekd.miracastreceiver.util.AppSettings.setMiracastRotation(
+                this, manualRotationDegrees, rotationDegrees)) {
+            Toast.makeText(this, R.string.miracast_resolution_reconnect, Toast.LENGTH_LONG).show()
+        }
         when {
             isMirrorSession() -> applyMirrorRotation()
             isCurrentImage() -> applyImageRotation()
@@ -1271,19 +1283,8 @@ class PlayerActivity : AppCompatActivity() {
         val w = if (videoW > 0) videoW.toFloat() else viewW
         val h = if (videoH > 0) videoH.toFloat() else viewH
         val crop = if (texture === mirrorRotateTexture) activeMirrorCrop() else RectF(0f, 0f, 1f, 1f)
-        val sideways = rotationDegrees % 180 != 0
-        val rotatedW = if (sideways) h * crop.height() else w * crop.width()
-        val rotatedH = if (sideways) w * crop.width() else h * crop.height()
-        val fit = minOf(viewW / rotatedW, viewH / rotatedH)
-        val matrix = Matrix().apply {
-            postScale(w / viewW, h / viewH)
-            postTranslate(-w * crop.centerX(), -h * crop.centerY())
-            postRotate(rotationDegrees.toFloat())
-            postScale(fit, fit)
-            postTranslate(viewW / 2f, viewH / 2f)
-        }
-        texture.setTransform(matrix)
-        texture.invalidate()
+        applyVideoTextureTransform(texture, videoW, videoH, rotationDegrees,
+            VideoContent(crop.left, crop.top, crop.right, crop.bottom))
     }
 
     /** 图片直接转 ImageView；转 90°/270° 时按旋转后的宽高重新等比缩放，保证完整显示。 */
@@ -1317,12 +1318,12 @@ class PlayerActivity : AppCompatActivity() {
     private fun isMirrorSession() = isAirPlayMirrorSession || isMiracastSession
 
     private fun activeMirrorCrop(): RectF =
-        if (isMiracastSession && autoRotateToFit) miracastContent else RectF(0f, 0f, 1f, 1f)
+        if (isMiracastSession && (autoRotateToFit || manualRotationDegrees != 0)) miracastContent else RectF(0f, 0f, 1f, 1f)
 
     /** 只分析 Miracast 原始解码帧，避免把旋转后的显示结果再次当作输入。 */
     private fun sampleMiracastContent() {
         if (Build.VERSION.SDK_INT < 24 || !isMiracastSession ||
-            !com.weekd.miracastreceiver.util.AppSettings.isAutoRotateToFit(this) || cropCopyPending) return
+            (!com.weekd.miracastreceiver.util.AppSettings.isAutoRotateToFit(this) && manualRotationDegrees == 0) || cropCopyPending) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastCropSampleAt < 1000) return
         val surface = mirrorSurface?.takeIf { it.isValid } ?: return

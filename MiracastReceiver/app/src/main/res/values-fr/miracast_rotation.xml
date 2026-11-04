@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Rotation Miracast enregistrée. Arrêtez la diffusion et reconnectez-vous pour négocier la résolution pivotée. La source doit prendre en charge les résolutions personnalisées.</string>
+</resources>

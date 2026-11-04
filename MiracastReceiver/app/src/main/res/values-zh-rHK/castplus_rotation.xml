@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Cast+ 接收解析度已更新，請停止投放後重新連線，以協商新解析度。</string>
+    <string name="castplus_resolution_failed">Cast+ 解析度更新失敗，旋轉角度已儲存，中斷連線後將重試。</string>
+</resources>

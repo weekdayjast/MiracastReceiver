@@ -13,6 +13,7 @@ import com.huawei.castpluskit.*
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.ui.CastPlusPlayerActivity
 import com.weekd.miracastreceiver.ui.ConnectActivity
+import com.weekd.miracastreceiver.util.AppSettings
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -45,6 +46,29 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
     private var pendingDevice: ProjectionDevice? = null
     private var surface: Surface? = null
     private var closing = false
+    private var displayProfile: CastPlusVideoProfile? = null
+
+    /** Updates the SDK's capability cache for the next connection; does not tear down playback. */
+    fun updateDisplayOrientation(): Boolean {
+        if (!enabled || client == null) return false
+        val (width, height) = castPlusDisplaySize(context)
+        val profile = castPlusVideoProfile(width, height, AppSettings.getCastPlusRotation(context))
+        if (profile == displayProfile) return true
+        val capability = HiSightCapability(profile.screenWidth, profile.screenHeight,
+            profile.videoWidth, profile.videoHeight).apply {
+            videoFps = 30
+            videoBitrate = profile.bitrate
+            setIsSupportRemoteCtrl(false)
+        }
+        if (call { client?.setCapability(capability) } != true) {
+            Timber.w("Cast+ display capability update rejected")
+            return false
+        }
+        displayProfile = profile
+        Timber.i("Cast+ declared screen=%dx%d, video=%dx%d at 30fps, bitrate=%d",
+            profile.screenWidth, profile.screenHeight, profile.videoWidth, profile.videoHeight, profile.bitrate)
+        return true
+    }
 
     fun start() {
         current = this
@@ -101,14 +125,7 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
         Timber.d("Cast+ event: %d", id)
         when (id) {
             Constant.EVENT_ID_SERVICE_BIND_SUCCESS -> {
-                val metrics = context.resources.displayMetrics
-                val w = metrics.widthPixels.coerceAtMost(1920).coerceAtLeast(640)
-                val h = metrics.heightPixels.coerceAtMost(1080).coerceAtLeast(360)
-                val capability = HiSightCapability(w, h, w, h).apply {
-                    videoFps = 30
-                    setIsSupportRemoteCtrl(false)
-                }
-                if (call { client!!.setCapability(capability) } != true ||
+                if (!updateDisplayOrientation() ||
                     call { client!!.setDiscoverable(true, DeviceInfo(DeviceInfoProvider(context).getDeviceName(), DeviceInfo.TYPE_TV)) } != true ||
                     call { client!!.setAuthMode(AuthInfo(AuthInfo.AUTH_MODE_GENERIC)) } != true) {
                     fail("Cast+ capability or discovery rejected")
@@ -132,10 +149,13 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
             Constant.EVENT_ID_DEVICE_DISCONNECTED -> {
                 // Do not accept a new session until teardown completes (or the SDK is rebound).
                 clearSession()
+                updateDisplayOrientation()
                 mutableState.value = State(Status.READY)
             }
-            Constant.EVENT_ID_RESOLUTION_UPDATE -> if (gate.token != null && info != null)
+            Constant.EVENT_ID_RESOLUTION_UPDATE -> if (gate.token != null && info != null) {
+                Timber.i("Cast+ negotiated video: %dx%d", info.videoWidth, info.videoHeight)
                 mutableState.value = state.value.copy(width = info.videoWidth, height = info.videoHeight)
+            }
         }
     }
 
@@ -251,6 +271,7 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
         call { listener?.let { client?.unregisterCallback(it) } }
         call { client?.deinit() }
         client = null; listener = null
+        displayProfile = null
         clearSession()
         mutableState.value = State()
         if (current === this) current = null

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Cast+の解像度を更新しました。キャストを停止して再接続し、新しい解像度で接続してください。</string>
+    <string name="castplus_resolution_failed">Cast+の解像度を更新できませんでした。回転角度は保存済みです。切断時に再試行します。</string>
+</resources>

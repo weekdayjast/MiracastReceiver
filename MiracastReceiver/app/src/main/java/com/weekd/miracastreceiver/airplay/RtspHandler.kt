@@ -24,8 +24,8 @@ import java.util.concurrent.Executors
  */
 open class RtspHandler(
     private val context: android.content.Context,
-    private val displayWidth: Int = 1920,
-    private val displayHeight: Int = 1080,
+    displayWidth: Int = 1920,
+    displayHeight: Int = 1080,
     private val audioEnabled: Boolean = false,
     private val videoSurfaceProvider: () -> android.view.Surface?,
     private val onStreamingStarted: (session: SessionDescription) -> Unit,
@@ -80,6 +80,13 @@ open class RtspHandler(
     /** Shows ([pin]) or hides (null) the on-screen pairing PIN during SRP pair-setup. */
     private val onShowPin: (pin: String?) -> Unit = {}
 ) {
+    @Volatile internal var displayResolution: Pair<Int, Int> = displayWidth to displayHeight
+        private set
+
+    fun updateDisplayResolution(width: Int, height: Int) {
+        require(width > 0 && height > 0)
+        displayResolution = width to height
+    }
 
     // ─── Legacy AirPlay SRP PIN pairing (only used when pinAuthEnabled) ───────
     @Volatile private var legacyPin: com.weekd.miracastreceiver.airplay.handshake.LegacyPairSetupPin? = null
@@ -682,13 +689,16 @@ open class RtspHandler(
     }
 
     /** GET /info — advertises receiver identity + capabilities (binary plist). */
-    private fun handleInfo(request: RtspRequest): RtspResponse = RtspResponse(
+    private fun handleInfo(request: RtspRequest): RtspResponse {
+        val (width, height) = displayResolution
+        return RtspResponse(
         statusCode = 200,
         statusMessage = "OK",
-        bodyBytes = InfoResponder.build(context, displayWidth, displayHeight, pinRequired = pinAuthEnabled),
+        bodyBytes = InfoResponder.build(context, width, height, pinRequired = pinAuthEnabled),
         contentType = "application/x-apple-binary-plist",
         protocol = request.responseProtocol()
-    )
+        )
+    }
 
     /**
      * POST /pair-setup. With PIN auth off (default) this is the anonymous Ed25519 exchange. With PIN

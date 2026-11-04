@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airplay_resolution_reconnect">Разрешение AirPlay обновлено. Остановите трансляцию и подключитесь заново для согласования нового разрешения.</string>
+</resources>

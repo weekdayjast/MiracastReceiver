@@ -26,6 +26,10 @@ class ConnectActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_connect)
+        val density = resources.displayMetrics.density
+        val width = minOf((640 * density).toInt(),
+            resources.displayMetrics.widthPixels - (24 * density).toInt()).coerceAtLeast(1)
+        window.setLayout(width, WindowManager.LayoutParams.MATCH_PARENT)
         token = intent.getStringExtra(CastPlusReceiver.TOKEN)
         receiver = CastPlusReceiver.current
         if (token == null || receiver?.state?.value?.request?.token != token) { finish(); return }
@@ -51,6 +55,7 @@ class ConnectActivity : AppCompatActivity() {
                     pin.text = if (request.accepted && request.pin.isNotEmpty())
                         getString(R.string.castplus_pin, request.pin) else if (request.accepted)
                         getString(R.string.castplus_connecting) else ""
+                    pin.visibility = if (pin.text.isNotEmpty()) View.VISIBLE else View.GONE
                 }
             }
         }

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">Résolution Cast+ mise à jour. Arrêtez la diffusion et reconnectez-vous pour négocier la nouvelle résolution.</string>
+    <string name="castplus_resolution_failed">Échec de la mise à jour Cast+. La rotation est enregistrée ; nouvel essai à la déconnexion.</string>
+</resources>

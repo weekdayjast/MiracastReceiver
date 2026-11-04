@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">บันทึกมุมหมุน Miracast แล้ว หยุดส่งภาพและเชื่อมต่อใหม่เพื่อตกลงความละเอียดหลังหมุน อุปกรณ์ส่งต้องรองรับความละเอียดแบบกำหนดเอง</string>
+</resources>

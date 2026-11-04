@@ -24,6 +24,7 @@ import com.weekd.miracastreceiver.cast.CastPlayerBridge
 import com.weekd.miracastreceiver.cast.GoogleCastReceiver
 import com.weekd.miracastreceiver.airplay.AirPlayCapabilities
 import com.weekd.miracastreceiver.airplay.fitMirrorResolution
+import com.weekd.miracastreceiver.airplay.orientMirrorResolution
 import com.weekd.miracastreceiver.airplay.AirPlayReceiver
 import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.dlna.DlnaMediaRenderer
@@ -87,6 +88,7 @@ class CastReceiverService : Service() {
     private var rootAdvertisingAttempted = false
     private var p2pFailure: ReceiverStatus.Miracast? = null
     private var p2pGroupReady = false
+    private var airPlayLandscapeResolution = 1920 to 1080
     private val nameListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == AppSettings.KEY_RECEIVER_NAME && initialized && !stopping) {
             val name = DeviceInfoProvider(this).getDeviceName()
@@ -97,6 +99,11 @@ class CastReceiverService : Service() {
             castPlusReceiver.updateDisplayName(name)
             wifiDirectManager.updateDeviceName(name)
             syncRootDeviceName()
+        }
+        if (key == AppSettings.KEY_AIRPLAY_PORTRAIT_DISPLAY && initialized && !stopping) {
+            val (width, height) = orientMirrorResolution(airPlayLandscapeResolution.first,
+                airPlayLandscapeResolution.second, AppSettings.isAirPlayPortraitDisplay(this))
+            airPlayReceiver.updateDisplayResolution(width, height)
         }
     }
 
@@ -161,11 +168,13 @@ class CastReceiverService : Service() {
         // A 4K display alone is insufficient: macOS may choose HEVC even when the
         // receiver has only advertised AVC. Keep AVC-only hardware within 1080p.
         val displayResolution = getBestDisplayResolution()
-        val mirrorResolution = if (AirPlayCapabilities.hardwareHevc4k) {
+        airPlayLandscapeResolution = if (AirPlayCapabilities.hardwareHevc4k) {
             displayResolution
         } else {
             fitMirrorResolution(displayResolution.first, displayResolution.second, 1920, 1080)
         }
+        val mirrorResolution = orientMirrorResolution(airPlayLandscapeResolution.first,
+            airPlayLandscapeResolution.second, AppSettings.isAirPlayPortraitDisplay(this))
         val deviceName = DeviceInfoProvider(this).getDeviceName()
         Timber.i("AirPlay mirror advertised resolution: ${mirrorResolution.first}x${mirrorResolution.second}")
 

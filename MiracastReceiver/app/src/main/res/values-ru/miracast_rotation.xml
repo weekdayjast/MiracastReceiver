@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Поворот Miracast сохранён. Остановите трансляцию и подключитесь заново для согласования разрешения. Отправитель должен поддерживать нестандартные разрешения.</string>
+</resources>

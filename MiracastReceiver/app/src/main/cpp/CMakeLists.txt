@@ -44,3 +44,9 @@ add_executable(wfdctl wfdctl.c)
 set_target_properties(wfdctl PROPERTIES
     PREFIX "lib"
     OUTPUT_NAME "wfdctl.so")
+
+# Export only the legacy SDK network-watcher compatibility symbols.
+add_library(castplus_network_compat SHARED castplus_network_compat.c)
+set_target_properties(castplus_network_compat PROPERTIES C_VISIBILITY_PRESET hidden)
+target_link_options(castplus_network_compat PRIVATE "-Wl,-z,global")
+target_link_libraries(castplus_network_compat ${log-lib})

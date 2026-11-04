@@ -31,7 +31,8 @@ import java.nio.charset.StandardCharsets
 class WfdSessionHandler(
     private val context: Context,
     private val socket: Socket,
-    private val rtpPort: Int
+    private val rtpPort: Int,
+    private val customModeProvider: (Boolean) -> WfdCustomVideoMode? = { wfdCustomVideoMode(context, it) }
 ) {
     private val input: InputStream = socket.getInputStream()
     private val output: OutputStream = socket.getOutputStream()
@@ -40,31 +41,13 @@ class WfdSessionHandler(
     private var sessionId = ""
     private var presentationUrl = ""
     private var playRequested = false
+    private var advertisedCustomMode: WfdCustomVideoMode? = null
 
     var onSessionEstablished: ((sessionId: String) -> Unit)? = null
     var onStreamStart: ((rtpPort: Int) -> Unit)? = null
     var onStreamStop: (() -> Unit)? = null
 
     companion object {
-        /**
-         * 本机作为 Sink 声明的能力集。字段依次为：
-         * native / preferred-display-mode / profile / level / CEA / VESA / HH /
-         * latency / min-slice-size / slice-enc-params / frame-rate-control / max-hres / max-vres
-         *
-         * CEA 位图只声明三档，Windows 实测会挑其中最高的一档：
-         * ```
-         * bit 8 (0x100) = 1920x1080p60   ← 目标：帧间隔 16ms
-         * bit 7 (0x080) = 1920x1080p30      链路撑不住时的退路
-         * bit 6 (0x040) = 1280x720p60       再退一档
-         * ```
-         * 之前用的 0x0001DEFF 看着覆盖很广，但**恰好没有 bit 8**，所以 Windows 只能选到
-         * 1080p30，帧间隔 33ms —— 而视频 PES 不定长，必须等下一帧首包才知道当前帧结束，
-         * 这个等待直接等于帧间隔，是延迟的大头。
-         *
-         * level 同步提到 0x10（H.264 Level 4.2）：1080p60 超出了 Level 4.0 的上限。
-         */
-        private const val VIDEO_FORMATS =
-            "00 00 02 10 000001C0 00000000 00000000 00 0000 0000 00 none none"
         private const val AUDIO_CODECS = "AAC 00000001 00"
     }
 
@@ -141,7 +124,11 @@ class WfdSessionHandler(
                 sendOptions()                                    // M2
             }
             "GET_PARAMETER" -> {
-                if (msg.contains("wfd_")) sendCapabilities(cseq)  // M3
+                val requested = msg.substringAfter("\r\n\r\n", "").lineSequence()
+                    .map { it.substringBefore(':').trim().lowercase(java.util.Locale.ROOT) }
+                    .filter { it.isNotEmpty() }.toSet()
+                if (requested.any { it.startsWith("wfd") || it == "microsoft_custom_video_formats" })
+                    sendCapabilities(cseq, requested)  // M3
                 else sendOk(cseq)                                 // keep-alive
             }
             "SET_PARAMETER" -> {
@@ -155,7 +142,7 @@ class WfdSessionHandler(
                         Timber.i("WFD: presentation URL = $it")
                     }
                 // M4 里 Source 回选的格式，第 5 个字段就是它选中的 CEA 分辨率位
-                param(msg, "wfd_video_formats")?.let { selected ->
+                (param(msg, "wfdx_video_formats") ?: param(msg, "wfd_video_formats"))?.let { selected ->
                     Timber.i("WFD: source selected video format = $selected")
                     val ceaBit = selected.split(' ').getOrNull(4)?.toLongOrNull(16) ?: 0L
                     val mode = when (ceaBit) {
@@ -166,6 +153,15 @@ class WfdSessionHandler(
                         else -> "CEA 0x%08X".format(ceaBit)
                     }
                     Timber.i("WFD: negotiated mode = $mode")
+                }
+                param(msg, "microsoft_custom_video_formats")?.takeIf { it != "none" }?.let { selected ->
+                    val expected = advertisedCustomMode
+                    if (expected == null || !matchesWfdCustomMode(selected, expected)) {
+                        Timber.w("WFD: source selected an unadvertised or malformed custom mode")
+                        send("RTSP/1.0 400 Bad Request\r\nCSeq: $cseq\r\nContent-Length: 0\r\n\r\n")
+                        return
+                    }
+                    Timber.i("WFD: negotiated custom mode = %dx%d p%d", expected.width, expected.height, expected.fps)
                 }
                 param(msg, "wfd_audio_codecs")?.let {
                     Timber.i("WFD: source selected audio codec = $it")
@@ -233,11 +229,17 @@ class WfdSessionHandler(
     /**
      * M3 能力响应：Source 问什么答什么，不认识的参数直接不答。
      * 实测 Windows 会问 27 项（含 wfd2_* / intel_* / microsoft_* 私有扩展），
-     * 只回下面这几项标准参数它照样接受并推进到 M4。
+     * 标准模式始终保留；仅在 Source 查询扩展时声明硬件支持的自定义分辨率。
      */
-    private fun sendCapabilities(cseq: String) {
+    private fun sendCapabilities(cseq: String, requested: Set<String>) {
+        val mode = if ("microsoft_custom_video_formats" in requested || "wfdx_video_formats" in requested)
+            customModeProvider("wfdx_video_formats" in requested) else null
+        if ("microsoft_custom_video_formats" in requested) advertisedCustomMode = mode?.takeIf {
+            "wfdx_video_formats" in requested || it.levelBit <= 0x10
+        }
+        if (mode != null) Timber.i("WFD: custom receive declaration = %dx%d p%d", mode.width, mode.height, mode.fps)
         val body = buildString {
-            append("wfd_video_formats: $VIDEO_FORMATS\r\n")
+            wfdVideoCapabilityLines(requested, mode).forEach { append(it).append("\r\n") }
             append("wfd_audio_codecs: $AUDIO_CODECS\r\n")
             // 关键：告诉 Source 往哪个 UDP 端口发 RTP，缺了这项收不到画面
             append("wfd_client_rtp_ports: RTP/AVP/UDP;unicast $rtpPort 0 mode=play\r\n")

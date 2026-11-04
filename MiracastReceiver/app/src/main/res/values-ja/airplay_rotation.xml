@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="airplay_resolution_reconnect">AirPlayの解像度を更新しました。ミラーリングを停止して再接続すると、新しい解像度で接続します。</string>
+</resources>

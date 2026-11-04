@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="castplus_resolution_reconnect">อัปเดตความละเอียด Cast+ แล้ว หยุดการส่งภาพและเชื่อมต่อใหม่เพื่อตกลงความละเอียดใหม่</string>
+    <string name="castplus_resolution_failed">อัปเดตความละเอียด Cast+ ไม่สำเร็จ บันทึกมุมหมุนแล้ว และจะลองอีกครั้งเมื่อตัดการเชื่อมต่อ</string>
+</resources>

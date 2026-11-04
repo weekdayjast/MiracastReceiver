@@ -111,19 +111,7 @@
         tools:visibility="visible" />
 
     <!-- 手动旋转浮动按钮：镜像/Miracast/图片模式用（没有控制条）。点屏幕或按遥控器 OK/上下键呼出，几秒后自动隐藏 -->
-    <ImageButton
-        android:id="@+id/btn_rotate_overlay"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_gravity="bottom|end"
-        android:layout_margin="24dp"
-        android:background="@drawable/bg_rotate_button"
-        android:focusable="true"
-        android:contentDescription="@string/cd_rotate_screen"
-        android:padding="14dp"
-        android:scaleType="fitCenter"
-        android:src="@drawable/ic_rotate"
-        android:visibility="gone" />
+    <include layout="@layout/rotate_overlay_button" />
 
     <!-- 加载指示器 -->
     <ProgressBar

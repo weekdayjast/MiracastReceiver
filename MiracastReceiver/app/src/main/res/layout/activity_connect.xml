@@ -1,81 +1,85 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#CC000000"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="48dp"
+    android:fillViewport="true"
+    android:padding="8dp"
     tools:context=".ui.ConnectActivity">
-
     <LinearLayout
-        android:layout_width="600dp"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/background_card"
-        android:orientation="vertical"
-        android:padding="40dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:text="@string/connect_request"
-            android:textColor="@color/text_primary"
-            android:textSize="32sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tv_request_info"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:gravity="center"
-            android:textColor="@color/text_secondary"
-            android:textSize="24sp"
-            tools:text="设备 iPhone 请求投屏" />
-
-        <TextView
-            android:id="@+id/tv_pairing_pin"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:gravity="center"
-            android:textColor="@color/text_primary"
-            android:textSize="26sp" />
-
-        <CheckBox
-            android:id="@+id/cb_remember_device"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="24dp"
-            android:text="@string/remember_device"
-            android:textColor="@color/text_secondary"
-            android:textSize="20sp" />
-
+        android:gravity="center"
+        android:orientation="vertical">
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:gravity="center"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/btn_deny"
-                android:layout_width="180dp"
-                android:layout_height="64dp"
-                android:layout_marginEnd="24dp"
-                android:text="@string/deny"
-                android:textSize="22sp" />
-
-            <Button
-                android:id="@+id/btn_allow"
-                android:layout_width="180dp"
-                android:layout_height="64dp"
-                android:layout_marginStart="24dp"
-                android:text="@string/allow"
-                android:textSize="22sp" />
+            android:background="@color/background_card"
+            android:orientation="vertical"
+            android:padding="@dimen/connect_card_padding">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:text="@string/connect_request"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/connect_title_size"
+                android:textStyle="bold" />
+            <TextView
+                android:id="@+id/tv_pairing_pin"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:textColor="@color/text_primary"
+                android:textSize="@dimen/connect_pin_size"
+                android:textStyle="bold"
+                android:visibility="gone"
+                tools:text="PIN: 12345678"
+                tools:visibility="visible" />
+            <TextView
+                android:id="@+id/tv_request_info"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/connect_body_size"
+                tools:text="设备 HUAWEI 请求投屏" />
+            <CheckBox
+                android:id="@+id/cb_remember_device"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:layout_marginTop="12dp"
+                android:text="@string/remember_device"
+                android:textColor="@color/text_secondary"
+                android:textSize="@dimen/connect_body_size" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/btn_deny"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/deny"
+                    android:textSize="@dimen/connect_button_size" />
+                <Button
+                    android:id="@+id/btn_allow"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:minHeight="48dp"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/allow"
+                    android:textSize="@dimen/connect_button_size" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
-</LinearLayout>
+</ScrollView>

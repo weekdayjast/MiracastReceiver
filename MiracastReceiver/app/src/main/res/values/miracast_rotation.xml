@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="miracast_resolution_reconnect">Miracast rotation saved. Stop casting and reconnect to negotiate the rotated resolution. Custom resolutions require sender support.</string>
+</resources>
