@@ -21,6 +21,7 @@ import com.weekd.miracastreceiver.discovery.DeviceInfoProvider
 import com.weekd.miracastreceiver.discovery.MdnsAdvertiser
 import com.weekd.miracastreceiver.service.CastReceiverService
 import com.weekd.miracastreceiver.service.ReceiverStatus
+import com.weekd.miracastreceiver.castplus.CastPlusReceiver
 import com.weekd.miracastreceiver.util.AppLanguage
 import com.weekd.miracastreceiver.util.AppSettings
 import com.weekd.miracastreceiver.utils.NetworkUtils
@@ -88,7 +89,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun requestWifiDirectPermissions() {
-        val missing = WIFI_DIRECT_PERMISSIONS.filter {
+        val permissions = WIFI_DIRECT_PERMISSIONS.toMutableSet()
+        if (AppSettings.isCastPlusEnabled(this)) permissions += setOf(
+            Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val missing = permissions.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isNotEmpty()) {
@@ -176,6 +180,15 @@ class MainActivity : AppCompatActivity() {
         tvDeviceName = findViewById(R.id.tv_device_name)
         tvDeviceIp = findViewById(R.id.tv_device_ip)
         tvStatus = findViewById(R.id.tv_status)
+        findViewById<SwitchCompat>(R.id.switch_castplus).apply {
+            isChecked = AppSettings.isCastPlusEnabled(this@MainActivity)
+            isEnabled = Build.VERSION.SDK_INT >= 23
+            setOnCheckedChangeListener { _, checked ->
+                AppSettings.setCastPlusEnabled(this@MainActivity, checked)
+                if (checked) requestWifiDirectPermissions()
+                startCastService()
+            }
+        }
         tvMiracastStatus = findViewById(R.id.tv_miracast_status)
         startupProgress = findViewById(R.id.startup_progress)
         switchAutoStart = findViewById(R.id.switch_auto_start)
@@ -290,6 +303,20 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             while (true) {
                 val service = ReceiverStatus.service
+                val castPlus = CastPlusReceiver.current?.state?.value?.status ?: CastPlusReceiver.Status.OFF
+                findViewById<TextView>(R.id.tv_castplus_status).setText(when (castPlus) {
+                    CastPlusReceiver.Status.OFF -> R.string.castplus_off
+                    CastPlusReceiver.Status.UNSUPPORTED -> R.string.castplus_unsupported
+                    CastPlusReceiver.Status.PERMISSION_REQUIRED -> R.string.castplus_permission
+                    CastPlusReceiver.Status.STARTING -> R.string.castplus_starting
+                    CastPlusReceiver.Status.READY -> R.string.castplus_ready
+                    CastPlusReceiver.Status.PAIRING -> R.string.castplus_pairing
+                    CastPlusReceiver.Status.CONNECTING -> R.string.castplus_connecting
+                    CastPlusReceiver.Status.PLAYING -> R.string.castplus_playing
+                    CastPlusReceiver.Status.PAUSED -> R.string.castplus_paused
+                    CastPlusReceiver.Status.DISCONNECTING -> R.string.castplus_disconnecting
+                    CastPlusReceiver.Status.ERROR -> R.string.castplus_error
+                })
                 val miracast = ReceiverStatus.miracast
                 tvStatus.setText(when (service) {
                     ReceiverStatus.Service.STARTING -> R.string.status_service_starting

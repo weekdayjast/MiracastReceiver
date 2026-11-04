@@ -87,6 +87,8 @@ android {
 }
 
 dependencies {
+    // Experimental Huawei Cast+ receiver. Source/provenance recorded next to the binary.
+    implementation(files("libs/HuaweiCastPlusEngine.jar"))
     // AndroidX Core
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.appcompat:appcompat:1.7.0")

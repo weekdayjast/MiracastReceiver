@@ -9,6 +9,10 @@ import android.content.Context
  * 内部用的 prefs 文件分开，避免清配对时误删用户设置。
  */
 object AppSettings {
+    fun isCastPlusEnabled(context: Context): Boolean = prefs(context).getBoolean("castplus_enabled", false)
+    fun setCastPlusEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean("castplus_enabled", enabled).apply()
+    }
     fun isAutoRotateToFit(context: Context): Boolean = prefs(context).getBoolean("auto_rotate_to_fit", false)
 
     fun setAutoRotateToFit(context: Context, enabled: Boolean) {

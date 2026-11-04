@@ -64,6 +64,7 @@ class CastReceiverService : Service() {
     private lateinit var dlnaRenderer: DlnaMediaRenderer
     private lateinit var castPlayerBridge: CastPlayerBridge
     private lateinit var googleCastReceiver: GoogleCastReceiver
+    private lateinit var castPlusReceiver: com.weekd.miracastreceiver.castplus.CastPlusReceiver
     private lateinit var ssdpServer: SsdpServer
     private lateinit var upnpHttpServer: UpnpHttpServer
     private lateinit var wfdServer: WfdServer
@@ -191,6 +192,13 @@ class CastReceiverService : Service() {
         initDlnaServices()
         castPlayerBridge = CastPlayerBridge(this)
         googleCastReceiver = GoogleCastReceiver(this, deviceName, deviceUuid, castPlayerBridge.session)
+        castPlusReceiver = com.weekd.miracastreceiver.castplus.CastPlusReceiver(this) {
+            sendBroadcast(Intent(com.weekd.miracastreceiver.ui.PlayerActivity.ACTION_REPLACED).setPackage(packageName))
+            airPlayPlayerStarted = false
+            runCatching { airPlayReceiver.disconnectSender() }
+            runCatching { wfdServer.disconnectSender() }
+            dlnaRenderer.setStopped()
+        }
         val playerStateFilter = IntentFilter().apply {
             addAction(CastPlayerBridge.ACTION_STATE)
             addAction("com.weekd.miracastreceiver.DISCONNECT_SENDER")
@@ -452,6 +460,7 @@ class CastReceiverService : Service() {
         if (servicesStarted) {
             Timber.i("Cast services already running — only retrying Wi-Fi Direct")
             runCatching { wifiDirectManager.start() }
+            updateCastPlus()
             return
         }
 
@@ -502,11 +511,17 @@ class CastReceiverService : Service() {
         }, 30_000L)
         wfdServer.start()
         ReceiverStatus.service = ReceiverStatus.Service.RUNNING
+        updateCastPlus()
 
         Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD + experimental Google Cast)")
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun updateCastPlus() {
+        if (com.weekd.miracastreceiver.util.AppSettings.isCastPlusEnabled(this)) castPlusReceiver.start()
+        else castPlusReceiver.stop()
+    }
 
     private fun advertiseMiracast() {
         if (stopping) return
@@ -580,6 +595,7 @@ class CastReceiverService : Service() {
         ssdpServer.stop()
         upnpHttpServer.stop()
         googleCastReceiver.stop()
+        castPlusReceiver.stop()
         castPlayerBridge.stop()
 
         shutdownMiracast()
