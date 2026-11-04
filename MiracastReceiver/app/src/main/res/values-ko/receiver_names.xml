@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">TV 이름</string>
+    <string name="receiver_name_custom">직접 이름 입력</string>
+    <string name="receiver_name_phone">휴대전화로 스캔하여 이름 변경</string>
+    <string name="receiver_name_system">시스템 기기 이름 사용</string>
+    <string name="receiver_name_save">저장</string>
+    <string name="receiver_name_hint">방을 선택하거나 이름을 입력하세요(UTF-8 기준 최대 48바이트). AirPlay, DLNA, Google Cast에 적용됩니다. root로 WFD를 켠 기기는 Wi-Fi Direct 이름도 동기화합니다(UTF-8 최대 32바이트, 긴 이름은 잘림).</string>
+    <string name="receiver_name_saved">저장했습니다. 전송 기기 목록을 다시 열어 새 이름을 확인하세요.</string>
+    <string name="receiver_name_invalid">제어 문자 없이 이름을 입력하세요. UTF-8 기준 최대 48바이트이며 비워 둘 수 없습니다. 저장에 실패하면 다시 시도하세요.</string>
+    <string name="receiver_name_network">설정을 열 수 없습니다. TV와 휴대전화를 같은 로컬 네트워크에 연결하고 다시 시도하세요.</string>
+    <string name="receiver_name_qr_hint">휴대전화를 같은 로컬 네트워크에 연결하고 코드를 스캔하여 브라우저에서 여세요. 링크는 10분 후 또는 이 창을 닫으면 만료됩니다. 아래 주소를 직접 입력할 수도 있습니다.</string>
+    <string-array name="receiver_name_presets">
+        <item>거실 TV</item>
+        <item>침실 TV</item>
+        <item>안방 TV</item>
+        <item>손님방 TV</item>
+        <item>식당 TV</item>
+        <item>서재 TV</item>
+    </string-array>
+</resources>

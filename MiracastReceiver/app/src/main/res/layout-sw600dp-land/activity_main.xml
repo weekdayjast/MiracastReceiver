@@ -55,6 +55,9 @@
                  沙发距离可读；名称特别长时最多两行，不裁切 -->
             <TextView
                 android:id="@+id/tv_device_name"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="@drawable/bg_device_name"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="26dp"
@@ -85,6 +88,7 @@
                 android:orientation="horizontal">
 
                 <ProgressBar
+                    android:id="@+id/startup_progress"
                     android:layout_width="24dp"
                     android:layout_height="24dp"
                     android:indeterminate="true"
@@ -100,6 +104,13 @@
                     android:textColor="@color/text_primary"
                     android:textSize="22sp" />
             </LinearLayout>
+            <TextView
+                android:id="@+id/tv_miracast_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:textColor="@color/text_secondary"
+                android:textSize="16sp" />
         </LinearLayout>
 
         <!-- 两栏之间的分隔线，让左右关系更明确 -->
@@ -194,6 +205,7 @@
                 android:text="@string/auto_rotate_to_fit"
                 android:textColor="@color/text_primary"
                 android:textSize="20sp" />
+
 
             <!-- 设置：界面语言 -->
             <LinearLayout

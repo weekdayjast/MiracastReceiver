@@ -9,6 +9,23 @@ import android.content.Context
  * 内部用的 prefs 文件分开，避免清配对时误删用户设置。
  */
 object AppSettings {
+    const val KEY_RECEIVER_NAME = "receiver_name"
+
+    fun getReceiverName(context: Context): String =
+        prefs(context).getString(KEY_RECEIVER_NAME, "") ?: ""
+
+    /** Empty means follow the system name. All entry points share the same validation. */
+    fun setReceiverName(context: Context, value: String): Boolean {
+        val name = if (value.isEmpty()) "" else ReceiverName.normalize(value) ?: return false
+        return prefs(context).edit().putString(KEY_RECEIVER_NAME, name).commit()
+    }
+
+    fun observe(context: Context, listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs(context).registerOnSharedPreferenceChangeListener(listener)
+
+    fun unobserve(context: Context, listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs(context).unregisterOnSharedPreferenceChangeListener(listener)
+
     fun isAutoRotateToFit(context: Context): Boolean = prefs(context).getBoolean("auto_rotate_to_fit", false)
 
     fun setAutoRotateToFit(context: Context, enabled: Boolean) {

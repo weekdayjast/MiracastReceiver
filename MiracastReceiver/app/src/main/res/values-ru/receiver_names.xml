@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">Название телевизора</string>
+    <string name="receiver_name_custom">Ввести название</string>
+    <string name="receiver_name_phone">Переименовать с телефона</string>
+    <string name="receiver_name_system">Использовать системное имя</string>
+    <string name="receiver_name_save">Сохранить</string>
+    <string name="receiver_name_hint">Выберите комнату или введите название (до 48 байт UTF-8). Оно используется в AirPlay, DLNA и Google Cast. Устройства WFD с root также синхронизируют имя Wi-Fi Direct (до 32 байт UTF-8; длинные имена сокращаются).</string>
+    <string name="receiver_name_saved">Сохранено. Откройте список устройств заново, чтобы увидеть новое имя.</string>
+    <string name="receiver_name_invalid">Введите непустое название до 48 байт UTF-8 без управляющих символов. Если сохранение не удалось, повторите попытку.</string>
+    <string name="receiver_name_network">Не удалось открыть настройку. Подключите телефон и телевизор к одной локальной сети и повторите попытку.</string>
+    <string name="receiver_name_qr_hint">Подключите телефон к той же локальной сети, отсканируйте код и откройте страницу в браузере. Ссылка действует 10 минут или до закрытия этого окна. Адрес также можно ввести вручную.</string>
+    <string-array name="receiver_name_presets">
+        <item>ТВ в гостиной</item>
+        <item>ТВ в спальне</item>
+        <item>ТВ главной спальни</item>
+        <item>ТВ в гостевой</item>
+        <item>ТВ в столовой</item>
+        <item>ТВ в кабинете</item>
+    </string-array>
+</resources>

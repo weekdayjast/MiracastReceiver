@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">TV name</string>
+    <string name="receiver_name_custom">Enter a custom name</string>
+    <string name="receiver_name_phone">Scan to rename with your phone</string>
+    <string name="receiver_name_system">Use system device name</string>
+    <string name="receiver_name_save">Save</string>
+    <string name="receiver_name_hint">Choose a room or enter a name (up to 48 UTF-8 bytes, about 16 Chinese characters). Used for AirPlay, DLNA and Google Cast. Root-enabled WFD devices also use this name for Wi-Fi Direct (32 UTF-8 bytes maximum; longer names are shortened).</string>
+    <string name="receiver_name_saved">Saved. Reopen the casting list to see the new name.</string>
+    <string name="receiver_name_invalid">Enter a nonempty name within 48 UTF-8 bytes, without control characters. If saving fails, try again.</string>
+    <string name="receiver_name_network">Unable to open phone setup. Connect the TV and phone to the same local network and try again.</string>
+    <string name="receiver_name_qr_hint">Connect your phone to the same local network, scan this code and open the page in a browser. This code expires after 10 minutes or when this dialog closes. You can also type the address below.</string>
+    <string-array name="receiver_name_presets">
+        <item>Living Room TV</item>
+        <item>Bedroom TV</item>
+        <item>Main Bedroom TV</item>
+        <item>Guest Bedroom TV</item>
+        <item>Dining Room TV</item>
+        <item>Study TV</item>
+    </string-array>
+</resources>

@@ -13,7 +13,7 @@ import javax.net.ssl.SSLSocket
 /** LAN-only experimental Cast V2 receiver. Lifecycle methods run on the main thread. */
 class GoogleCastReceiver(
     private val context: Context,
-    private val name: String,
+    private var name: String,
     private val deviceId: String,
     val session: CastSession
 ) {
@@ -166,6 +166,13 @@ class GoogleCastReceiver(
         }
         advertiser = registration
         registration.start()
+    }
+
+    fun updateDisplayName(value: String) {
+        name = value
+        advertiser?.stop()
+        advertiser = null
+        if (server != null) advertise()
     }
 
     private fun closeTransport() {

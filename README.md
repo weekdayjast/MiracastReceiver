@@ -107,6 +107,12 @@
 - 或使用 Emby、Plex 等媒体服务器
 - 或按 `Win+K` 连接无线显示器（Miracast，部分电视需 root）
 
+### 电视命名（Issue #33）
+
+在应用主界面点击当前显示的设备名称，直接输入新名称；输入框支持下拉选择客厅、卧室、主卧、客卧、餐厅、书房等名称，也可输入自定义名称或恢复系统名称。选择「手机扫码命名」后，用同一局域网的手机扫码并在浏览器中保存；无需安装手机 App。二维码十分钟内有效，关闭窗口或离开应用后立即失效。
+
+名称保存在本机，重启后保留；保存后刷新 AirPlay、DLNA 和 Google Cast 服务发现，重新打开手机投屏清单查看。中文名称最长约 16 字（48 个 UTF-8 字节）。通过 root 开启 WFD 的设备会同步 Wi-Fi Direct / Windows Win+K 名称，启动服务时也会重新应用。Wi-Fi Direct 最多 32 个 UTF-8 字节，超长名称会按完整字符截短；其他设备仍受系统权限限制。
+
 ### 🛠️ 从源码构建
 
 #### 环境要求
@@ -177,8 +183,8 @@ cd MiracastReceiver
    - 安卓手机投屏和 Windows `Win+K` 列表里显示的是电视的 Wi-Fi Direct 设备名，由系统管理
    - Android 11 起修改该名称需要 `NETWORK_SETTINGS` 等系统级权限，普通应用无法修改，
      只能保持系统默认的 `Android_xxxx`
-   - 如果电视的「设置 → 网络」里有 Wi-Fi Direct 设置页，可以在那里改名；没有的话目前无法修改
-   - AirPlay / DLNA 不受影响，显示的是电视「设置 → 关于 → 设备名称」里的名字
+   - 如果电视的「设置 → 网络」里有 Wi-Fi Direct 设置页，可以在那里改名；没有该设置页时，通过 root 开启 WFD 的设备会由本应用同步名称
+   - AirPlay / DLNA / Google Cast 使用应用内「电视名称」；未设置时使用电视系统设备名称
 
 4. **需要「显示在其他应用上层」权限**
    - Android 10 起系统禁止后台弹出界面。未打开本应用时（开机自启后、或退回桌面后）投屏，
@@ -289,6 +295,12 @@ cd MiracastReceiver
 - Or cast from Emby, Plex media servers
 - Or press `Win+K` to connect a wireless display (Miracast, root required on some TVs)
 
+### TV names (Issue #33)
+
+Click the displayed device name on the main screen to edit it directly. The input offers room presets and the system name in its dropdown, and a button opens a QR code for a phone on the same LAN. Open the scanned link in a browser and save; no phone app is required. The QR link expires after ten minutes or when the dialog closes or the app leaves the foreground.
+
+Names persist across restarts and refresh AirPlay, DLNA and Google Cast discovery without restarting playback. Reopen the sender’s device list after saving. Custom names allow up to 48 UTF-8 bytes. Devices enabling WFD through root also synchronize the Wi-Fi Direct / Windows Win+K name, including at service startup. Wi-Fi Direct names are shortened at complete character boundaries to 32 UTF-8 bytes; other devices remain subject to system permissions.
+
 ### 🛠️ Build from Source
 
 #### Requirements
@@ -358,8 +370,8 @@ Output APKs: `app/build/outputs/apk/`
    - Android screen casting and Windows `Win+K` show the TV's Wi-Fi Direct device name, which the system owns
    - Since Android 11, renaming it requires system permissions such as `NETWORK_SETTINGS`, so the app
      cannot change it and the system default `Android_xxxx` remains
-   - If the TV has a Wi-Fi Direct page under Settings → Network, rename it there; otherwise it cannot be changed for now
-   - AirPlay / DLNA are unaffected and use the name from the TV's Settings → About → Device name
+   - If the TV has a Wi-Fi Direct page under Settings → Network, rename it there; otherwise devices enabling WFD through root synchronize the name through this app
+   - AirPlay / DLNA / Google Cast use the app’s TV name, falling back to the TV system device name
 
 4. **"Display over other apps" permission required**
    - Since Android 10, apps may not open screens from the background. When the app is not open

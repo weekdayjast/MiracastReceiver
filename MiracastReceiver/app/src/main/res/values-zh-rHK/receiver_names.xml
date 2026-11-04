@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">電視名稱</string>
+    <string name="receiver_name_custom">輸入自訂名稱</string>
+    <string name="receiver_name_phone">手機掃碼命名</string>
+    <string name="receiver_name_system">恢復系統裝置名稱</string>
+    <string name="receiver_name_save">儲存</string>
+    <string name="receiver_name_hint">選擇房間或輸入名稱（最多 48 個 UTF-8 位元組，約 16 個漢字）。用於 AirPlay、DLNA 和 Google Cast；透過 root 開啟 WFD 的裝置也會同步 Wi-Fi Direct 名稱（最多 32 個 UTF-8 位元組，過長會截短）。</string>
+    <string name="receiver_name_saved">已儲存，請重新開啟投放清單查看新名稱。</string>
+    <string name="receiver_name_invalid">請輸入非空名稱，最多 48 個 UTF-8 位元組，不可包含控制字元；儲存失敗時請重試。</string>
+    <string name="receiver_name_network">無法開啟手機設定，請確認電視與手機連接同一區域網路後重試。</string>
+    <string name="receiver_name_qr_hint">手機連接同一區域網路，掃碼後在瀏覽器開啟頁面，即可為本電視命名。二維碼十分鐘後或關閉此視窗後失效，也可手動輸入下方位址。</string>
+    <string-array name="receiver_name_presets">
+        <item>客廳電視</item>
+        <item>臥室電視</item>
+        <item>主臥電視</item>
+        <item>客臥電視</item>
+        <item>餐廳電視</item>
+        <item>書房電視</item>
+    </string-array>
+</resources>

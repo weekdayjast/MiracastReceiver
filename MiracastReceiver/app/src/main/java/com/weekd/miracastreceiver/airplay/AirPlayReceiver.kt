@@ -49,7 +49,7 @@ import java.net.Socket
 class AirPlayReceiver(
     private val context: Context,
     /** User-configured display name from Settings (blank = use system device name). */
-    private val displayName: String = "",
+    @Volatile private var displayName: String = "",
     /** Advertised mirroring resolution; callers can pass the TV's native display mode. */
     private val mirrorWidth: Int = 1920,
     private val mirrorHeight: Int = 1080,
@@ -216,6 +216,7 @@ class AirPlayReceiver(
         Logger.d("Timing handler started on UDP port ${TimingHandler.TIMING_PORT}")
     }
 
+    @Synchronized
     private fun startMdnsService() {
         mdnsService = MdnsService(
             context = context,
@@ -223,6 +224,22 @@ class AirPlayReceiver(
             onActualNameRegistered = { actualName -> onActualNameRegistered(actualName) }
         ).also { it.start(displayName.ifBlank { null }) }
         Logger.d("mDNS service started")
+    }
+
+    /** Refresh discovery without tearing down an active stream. */
+    @Synchronized
+    fun updateDisplayName(name: String) {
+        displayName = name
+        refreshDisplayName()
+    }
+
+    @Synchronized
+    private fun refreshDisplayName() {
+        try {
+            mdnsService?.restart(displayName.ifBlank { null })
+        } catch (e: Exception) {
+            Logger.e("Failed to refresh AirPlay name", e)
+        }
     }
 
     private fun startRtspHandler() {
@@ -323,7 +340,7 @@ class AirPlayReceiver(
 
         scope.launch {
             try {
-                mdnsService?.restart(displayName.ifBlank { null })
+                refreshDisplayName()
             } catch (e: Exception) {
                 Logger.e("Failed to restart mDNS after streaming", e)
             }

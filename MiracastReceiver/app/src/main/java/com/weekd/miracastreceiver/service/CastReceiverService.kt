@@ -33,6 +33,8 @@ import com.weekd.miracastreceiver.miracast.WfdRootHelper
 import com.weekd.miracastreceiver.miracast.WfdServer
 import com.weekd.miracastreceiver.miracast.WifiDirectManager
 import com.weekd.miracastreceiver.util.AppLanguage
+import com.weekd.miracastreceiver.util.AppSettings
+import android.content.SharedPreferences
 import com.weekd.miracastreceiver.utils.NetworkUtils
 import timber.log.Timber
 import java.util.UUID
@@ -78,11 +80,23 @@ class CastReceiverService : Service() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var networkWaitRunnable: Runnable? = null
     private var networkWaitElapsedMs = 0L
-    private var stopping = false
+    @Volatile private var stopping = false
+    private var rootAdvertisingActive = false
     private var rootAdvertisingPending = false
     private var rootAdvertisingAttempted = false
     private var p2pFailure: ReceiverStatus.Miracast? = null
     private var p2pGroupReady = false
+    private val nameListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppSettings.KEY_RECEIVER_NAME && initialized && !stopping) {
+            val name = DeviceInfoProvider(this).getDeviceName()
+            airPlayReceiver.updateDisplayName(name)
+            upnpHttpServer.updateDisplayName(name)
+            ssdpServer.refreshAdvertisement()
+            googleCastReceiver.updateDisplayName(name)
+            wifiDirectManager.updateDeviceName(name)
+            syncRootDeviceName()
+        }
+    }
 
     private val playerStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -124,6 +138,7 @@ class CastReceiverService : Service() {
         ReceiverStatus.service = ReceiverStatus.Service.STARTING
         ReceiverStatus.miracast = ReceiverStatus.Miracast.CHECKING
         super.onCreate()
+        AppSettings.observe(this, nameListener)
         Timber.i("CastReceiverService created")
         createNotificationChannel()
         // startForeground 放在 onStartCommand 里：前台服务类型要看这次是不是开机拉起的
@@ -534,6 +549,8 @@ class CastReceiverService : Service() {
             mainHandler.post {
                 rootAdvertisingPending = false
                 if (!stopping) {
+                    rootAdvertisingActive = result == WfdRootHelper.AdvertiseResult.COMMAND_SENT
+                    syncRootDeviceName()
                     ReceiverStatus.miracast = p2pFailure ?: when {
                         wifiDirectManager.isWfdConfigured -> ReceiverStatus.Miracast.ADVERTISING
                         result == WfdRootHelper.AdvertiseResult.COMMAND_SENT -> ReceiverStatus.Miracast.ADVERTISING
@@ -541,6 +558,19 @@ class CastReceiverService : Service() {
                         else -> ReceiverStatus.Miracast.SETUP_FAILED
                     }
                     Timber.i("Miracast startup: %s (%s)", ReceiverStatus.miracast, result)
+                }
+            }
+        }
+    }
+
+    private fun syncRootDeviceName() {
+        if (!rootAdvertisingActive || stopping) return
+        val appContext = applicationContext
+        wfdRootExecutor.execute {
+            if (!stopping) {
+                val name = DeviceInfoProvider(appContext).getDeviceName()
+                if (!WfdRootHelper.setDeviceName(appContext, name)) {
+                    Timber.w("WFD: could not sync P2P device name via root")
                 }
             }
         }
@@ -556,6 +586,7 @@ class CastReceiverService : Service() {
 
     override fun onDestroy() {
         stopping = true
+        AppSettings.unobserve(this, nameListener)
         ReceiverStatus.service = ReceiverStatus.Service.STOPPED
         super.onDestroy()
         Timber.i("CastReceiverService destroyed")
@@ -593,6 +624,7 @@ class CastReceiverService : Service() {
      */
     private fun shutdownMiracast() {
         stopping = true
+        rootAdvertisingActive = false
         runCatching { wfdServer.stop() }
         if (rootAdvertisingAttempted) {
             rootAdvertisingAttempted = false

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">Nombre del televisor</string>
+    <string name="receiver_name_custom">Introducir un nombre</string>
+    <string name="receiver_name_phone">Cambiar nombre desde el móvil</string>
+    <string name="receiver_name_system">Usar nombre del sistema</string>
+    <string name="receiver_name_save">Guardar</string>
+    <string name="receiver_name_hint">Elige una habitación o escribe un nombre (máximo 48 bytes UTF-8). Se usa en AirPlay, DLNA y Google Cast. Los dispositivos WFD con root sincronizan el nombre Wi-Fi Direct (hasta 32 bytes UTF-8; se acorta si es necesario).</string>
+    <string name="receiver_name_saved">Guardado. Vuelve a abrir la lista de dispositivos para ver el nuevo nombre.</string>
+    <string name="receiver_name_invalid">Escribe un nombre no vacío de hasta 48 bytes UTF-8, sin caracteres de control. Si no se guarda, vuelve a intentarlo.</string>
+    <string name="receiver_name_network">No se pudo abrir la configuración. Conecta el móvil y el televisor a la misma red local e inténtalo de nuevo.</string>
+    <string name="receiver_name_qr_hint">Conecta el móvil a la misma red local, escanea el código y abre la página en un navegador. El enlace caduca en 10 minutos o al cerrar esta ventana. También puedes escribir la dirección.</string>
+    <string-array name="receiver_name_presets">
+        <item>TV del salón</item>
+        <item>TV del dormitorio</item>
+        <item>TV del dormitorio principal</item>
+        <item>TV de invitados</item>
+        <item>TV del comedor</item>
+        <item>TV del estudio</item>
+    </string-array>
+</resources>

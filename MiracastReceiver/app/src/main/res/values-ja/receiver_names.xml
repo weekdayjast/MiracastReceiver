@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">テレビの名前</string>
+    <string name="receiver_name_custom">名前を入力</string>
+    <string name="receiver_name_phone">スマートフォンで読み取り・名前変更</string>
+    <string name="receiver_name_system">システムの名前を使う</string>
+    <string name="receiver_name_save">保存</string>
+    <string name="receiver_name_hint">部屋を選ぶか名前を入力してください（UTF-8で48バイトまで）。AirPlay、DLNA、Google Castに反映されます。rootでWFDを有効にした機器ではWi-Fi Direct名も同期します（UTF-8で32バイトまで。長い名前は短縮）。</string>
+    <string name="receiver_name_saved">保存しました。キャスト先の一覧を開き直して確認してください。</string>
+    <string name="receiver_name_invalid">空でない名前をUTF-8で48バイト以内、制御文字なしで入力してください。保存できない場合は再試行してください。</string>
+    <string name="receiver_name_network">設定を開けません。テレビとスマートフォンを同じローカルネットワークにつなぎ、再試行してください。</string>
+    <string name="receiver_name_qr_hint">スマートフォンを同じローカルネットワークにつなぎ、コードを読み取ってブラウザーで開いてください。リンクは10分後、またはこの画面を閉じると無効になります。下のアドレスを入力しても開けます。</string>
+    <string-array name="receiver_name_presets">
+        <item>リビングのテレビ</item>
+        <item>寝室のテレビ</item>
+        <item>主寝室のテレビ</item>
+        <item>客室のテレビ</item>
+        <item>食堂のテレビ</item>
+        <item>書斎のテレビ</item>
+    </string-array>
+</resources>

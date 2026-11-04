@@ -3,6 +3,7 @@ package com.weekd.miracastreceiver.ui
 import android.Manifest
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -46,6 +47,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var switchAutoStart: SwitchCompat
     private lateinit var switchReturnToApp: SwitchCompat
     private lateinit var tvLanguageValue: TextView
+    private lateinit var deviceNameDialog: DeviceNameDialog
+    private val nameListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+        if (key == AppSettings.KEY_RECEIVER_NAME) {
+            tvDeviceName.text = deviceInfoProvider.getDeviceName()
+            mdnsAdvertiser.stopMiracastAdvertising()
+            startAdvertising()
+        }
+    }
 
     /** 定位权限弹窗还在时不叠加悬浮窗权限提示，等它有结果再说 */
     private var wifiPermissionPending = false
@@ -78,6 +87,7 @@ class MainActivity : AppCompatActivity() {
 
         initServices()
         initViews()
+        AppSettings.observe(this, nameListener)
         // 切换语言会重建本页（savedInstanceState 非空），这时不要把权限弹窗再弹一遍
         if (savedInstanceState == null) {
             requestWifiDirectPermissions()
@@ -207,6 +217,8 @@ class MainActivity : AppCompatActivity() {
         // 设置设备名称
         val deviceName = deviceInfoProvider.getDeviceName()
         tvDeviceName.text = deviceName
+        deviceNameDialog = DeviceNameDialog(this)
+        tvDeviceName.setOnClickListener { deviceNameDialog.show() }
     }
 
     /** 第一项是「跟随系统」，其后是 [AppLanguage.OPTIONS]。 */
@@ -317,7 +329,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStop() {
+        deviceNameDialog.close()
+        super.onStop()
+    }
+
     override fun onDestroy() {
+        AppSettings.unobserve(this, nameListener)
         super.onDestroy()
         mdnsAdvertiser.stopAdvertising()
         Timber.i("MainActivity destroyed")

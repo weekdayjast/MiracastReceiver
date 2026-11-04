@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">टीवी का नाम</string>
+    <string name="receiver_name_custom">अपना नाम लिखें</string>
+    <string name="receiver_name_phone">फ़ोन से स्कैन करके नाम बदलें</string>
+    <string name="receiver_name_system">सिस्टम का नाम इस्तेमाल करें</string>
+    <string name="receiver_name_save">सहेजें</string>
+    <string name="receiver_name_hint">कमरा चुनें या नाम लिखें (अधिकतम 48 UTF-8 बाइट)। AirPlay, DLNA और Google Cast में यही नाम दिखेगा। root से चालू WFD डिवाइस में Wi-Fi Direct नाम भी बदलेगा (अधिकतम 32 UTF-8 बाइट; लंबा नाम छोटा किया जाएगा)।</string>
+    <string name="receiver_name_saved">सहेज लिया गया। नया नाम देखने के लिए कास्ट सूची फिर खोलें।</string>
+    <string name="receiver_name_invalid">बिना नियंत्रण वर्णों वाला नाम लिखें, अधिकतम 48 UTF-8 बाइट। सहेजने में समस्या हो तो फिर कोशिश करें।</string>
+    <string name="receiver_name_network">सेटअप नहीं खुला। टीवी और फ़ोन को एक ही स्थानीय नेटवर्क से जोड़कर फिर कोशिश करें।</string>
+    <string name="receiver_name_qr_hint">फ़ोन को उसी स्थानीय नेटवर्क से जोड़ें, कोड स्कैन करें और ब्राउज़र में पेज खोलें। लिंक 10 मिनट बाद या यह विंडो बंद होने पर समाप्त होगा। नीचे का पता भी लिख सकते हैं।</string>
+    <string-array name="receiver_name_presets">
+        <item>बैठक का टीवी</item>
+        <item>बेडरूम टीवी</item>
+        <item>मुख्य बेडरूम टीवी</item>
+        <item>अतिथि कक्ष टीवी</item>
+        <item>भोजन कक्ष टीवी</item>
+        <item>अध्ययन कक्ष टीवी</item>
+    </string-array>
+</resources>

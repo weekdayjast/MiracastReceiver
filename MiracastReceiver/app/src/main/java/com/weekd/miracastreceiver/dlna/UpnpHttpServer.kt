@@ -22,7 +22,7 @@ class UpnpHttpServer(
     private val context: Context,
     private val renderer: DlnaMediaRenderer,
     private val deviceUuid: String,
-    private val deviceName: String,
+    @Volatile private var deviceName: String,
     private val manufacturer: String,
     private val modelName: String,
     private val localIp: String,
@@ -125,6 +125,10 @@ class UpnpHttpServer(
                 Timber.e(e, "Error handling UPnP client")
             }
         }
+    }
+
+    fun updateDisplayName(value: String) {
+        deviceName = value
     }
 
     private fun sendDeviceDescription(output: OutputStream) {

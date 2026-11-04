@@ -74,6 +74,22 @@ object WfdRootHelper {
         }
     }
 
+    /** Rename the native P2P device after this service has already enabled WFD via root. */
+    fun setDeviceName(context: Context, displayName: String): Boolean {
+        val name = P2pDeviceName.fromDisplayName(displayName) ?: return false
+        val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
+        if (!binary.exists()) return false
+        val socket = CTRL_SOCKET_PATHS.firstOrNull { runAsRoot("ls $it") } ?: return false
+        val command = P2pDeviceName.command(binary.absolutePath, socket, name) ?: return false
+        if (!runAsRoot(command)) return false
+        // Keep Android's stored P2P name in sync, so framework reinitialization keeps it.
+        if (!runAsRoot("settings put global wifi_p2p_device_name ${P2pDeviceName.quote(name)}")) {
+            Timber.w("WFD: P2P name sent, but system name persistence failed")
+        }
+        Timber.i("WFD: P2P device name command sent")
+        return true
+    }
+
     /** 撤销 WFD 广播（关闭投屏接收时调用，避免一直对外宣告自己是显示器）。 */
     fun stopAdvertising(context: Context): Boolean {
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)

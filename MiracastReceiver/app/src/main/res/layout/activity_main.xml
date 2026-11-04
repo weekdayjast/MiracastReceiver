@@ -42,6 +42,9 @@
         <!-- 设备名称 -->
         <TextView
             android:id="@+id/tv_device_name"
+            android:clickable="true"
+            android:focusable="true"
+            android:background="@drawable/bg_device_name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="20dp"
@@ -152,6 +155,7 @@
                 android:textColor="@color/text_secondary"
                 android:textSize="12sp" />
         </LinearLayout>
+
 
         <!-- 设置：界面语言 -->
         <androidx.appcompat.widget.SwitchCompat

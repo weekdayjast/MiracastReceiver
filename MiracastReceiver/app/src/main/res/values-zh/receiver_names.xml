@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">电视名称</string>
+    <string name="receiver_name_custom">输入自定义名称</string>
+    <string name="receiver_name_phone">手机扫码命名</string>
+    <string name="receiver_name_system">恢复系统设备名称</string>
+    <string name="receiver_name_save">保存</string>
+    <string name="receiver_name_hint">选择房间或输入名称（最多 48 个 UTF-8 字节，约 16 个汉字）。用于 AirPlay、DLNA 和 Google Cast；通过 root 开启 WFD 的设备也会同步 Wi-Fi Direct 名称（最多 32 个 UTF-8 字节，超长截短）。</string>
+    <string name="receiver_name_saved">已保存，请重新打开投屏清单查看新名称。</string>
+    <string name="receiver_name_invalid">请输入非空名称，最多 48 个 UTF-8 字节，不可包含控制字符；保存失败时请重试。</string>
+    <string name="receiver_name_network">无法打开手机设置，请确认电视与手机连接同一局域网后重试。</string>
+    <string name="receiver_name_qr_hint">手机连接同一局域网，扫码后在浏览器打开页面，即可为本电视命名。二维码十分钟后或关闭此窗口后失效，也可手动输入下方地址。</string>
+    <string-array name="receiver_name_presets">
+        <item>客厅电视</item>
+        <item>卧室电视</item>
+        <item>主卧电视</item>
+        <item>客卧电视</item>
+        <item>餐厅电视</item>
+        <item>书房电视</item>
+    </string-array>
+</resources>

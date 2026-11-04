@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="receiver_name">ชื่อทีวี</string>
+    <string name="receiver_name_custom">ป้อนชื่อเอง</string>
+    <string name="receiver_name_phone">สแกนด้วยมือถือเพื่อเปลี่ยนชื่อ</string>
+    <string name="receiver_name_system">ใช้ชื่ออุปกรณ์จากระบบ</string>
+    <string name="receiver_name_save">บันทึก</string>
+    <string name="receiver_name_hint">เลือกห้องหรือป้อนชื่อ (ไม่เกิน 48 ไบต์ UTF-8) ใช้กับ AirPlay, DLNA และ Google Cast อุปกรณ์ WFD ที่เปิดผ่าน root จะใช้ชื่อ Wi-Fi Direct เดียวกัน (ไม่เกิน 32 ไบต์ UTF-8 ชื่อที่ยาวจะถูกตัด)</string>
+    <string name="receiver_name_saved">บันทึกแล้ว เปิดรายการอุปกรณ์อีกครั้งเพื่อดูชื่อใหม่</string>
+    <string name="receiver_name_invalid">ป้อนชื่อที่ไม่ว่าง ไม่เกิน 48 ไบต์ UTF-8 และไม่มีอักขระควบคุม หากบันทึกไม่สำเร็จให้ลองใหม่</string>
+    <string name="receiver_name_network">เปิดการตั้งค่าไม่ได้ เชื่อมต่อทีวีและมือถือกับเครือข่ายท้องถิ่นเดียวกันแล้วลองใหม่</string>
+    <string name="receiver_name_qr_hint">เชื่อมต่อมือถือกับเครือข่ายท้องถิ่นเดียวกัน สแกนโค้ดแล้วเปิดในเบราว์เซอร์ ลิงก์หมดอายุใน 10 นาทีหรือเมื่อปิดหน้าต่างนี้ หรือพิมพ์ที่อยู่ด้านล่างได้</string>
+    <string-array name="receiver_name_presets">
+        <item>ทีวีห้องนั่งเล่น</item>
+        <item>ทีวีห้องนอน</item>
+        <item>ทีวีห้องนอนหลัก</item>
+        <item>ทีวีห้องพักแขก</item>
+        <item>ทีวีห้องอาหาร</item>
+        <item>ทีวีห้องทำงาน</item>
+    </string-array>
+</resources>

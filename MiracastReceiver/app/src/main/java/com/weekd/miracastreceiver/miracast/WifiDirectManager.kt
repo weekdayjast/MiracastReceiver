@@ -25,7 +25,7 @@ import timber.log.Timber
  */
 class WifiDirectManager(
     private val context: Context,
-    private val deviceName: String
+    private var deviceName: String
 ) {
     /**
      * 不少老电视（尤其非 Android TV 认证的整机）根本没有 Wi-Fi Direct，
@@ -202,6 +202,7 @@ class WifiDirectManager(
                             if (group != null) {
                                 Timber.i("Existing group found: ${group.networkName}")
                                 onGroupCreated?.invoke(group)
+                                setDeviceName(deviceName)
                             } else {
                                 onStartupState?.invoke(StartupState.FAILED)
                             }
@@ -225,10 +226,11 @@ class WifiDirectManager(
      * 尝试把 P2P 设备名改成 [deviceName]（安卓手机投屏列表里显示的就是它）。
      *
      * Android 11 起系统要求调用方持有 NETWORK_SETTINGS / NETWORK_STACK / OVERRIDE_WIFI_CONFIG
-     * 之一，普通应用拿不到，这里必然失败，名称保持系统默认的 `Android_xxxx`。
-     * 只有旧系统或系统签名的构建才会成功，保留调用是为了这些设备。
+     * 之一，普通应用通常拿不到。旧系统或系统签名构建可直接成功；
+     * 通过 root 开启 WFD 的设备由服务另外调用 WfdRootHelper 同步名称。
      */
     private fun setDeviceName(name: String) {
+        val p2pName = P2pDeviceName.fromDisplayName(name) ?: return
         try {
             // 使用反射设置设备名称（API 限制）
             val setDeviceNameMethod = WifiP2pManager::class.java.getMethod(
@@ -238,7 +240,7 @@ class WifiDirectManager(
                 WifiP2pManager.ActionListener::class.java
             )
 
-            setDeviceNameMethod.invoke(manager, channel, name, object : WifiP2pManager.ActionListener {
+            setDeviceNameMethod.invoke(manager, channel, p2pName, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {
                     Timber.i("Device name set to: $name")
                 }
@@ -250,6 +252,11 @@ class WifiDirectManager(
         } catch (e: Exception) {
             Timber.w(e, "Could not set device name (requires system permissions)")
         }
+    }
+
+    fun updateDeviceName(name: String) {
+        deviceName = name
+        if (channel != null) setDeviceName(name)
     }
 
     private fun registerLocalService() {

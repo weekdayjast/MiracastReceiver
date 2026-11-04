@@ -2,7 +2,6 @@
 
 import android.content.Context
 import android.net.wifi.WifiManager
-import android.provider.Settings
 import timber.log.Timber
 import java.net.NetworkInterface
 import java.util.UUID
@@ -24,33 +23,9 @@ import java.util.UUID
  */
 object NetworkUtils {
 
-    /**
-     * Returns the user-visible device name as configured in Android settings.
-     *
-     * This is the name that will appear in the macOS AirPlay picker, so it's
-     * important that it matches what the user set in their TV's settings.
-     *
-     * Sources tried in order:
-     * 1. Settings.Global.DEVICE_NAME (Android 5+, most TVs)
-     * 2. Settings.Secure.BLUETOOTH_NAME (Bluetooth device name, often same as device name)
-     * 3. Fallback: "PhairPlay" (if neither source is available)
-     *
-     * SECURITY: The returned value is sanitized — mDNS service names must not contain
-     * certain special characters. We strip any character outside [A-Za-z0-9 _-].
-     *
-     * @param context Android context (needed to read system settings)
-     * @return The sanitized device name, never null or empty.
-     */
-    fun getDeviceName(context: Context): String {
-        val rawName = Settings.Global.getString(context.contentResolver, "device_name")
-            ?: Settings.Secure.getString(context.contentResolver, "bluetooth_name")
-            ?: DEFAULT_DEVICE_NAME
-
-        // Sanitize: keep only safe characters for mDNS service names
-        val sanitized = rawName.replace(Regex("[^A-Za-z0-9 _\\-]"), "").trim()
-
-        return sanitized.ifEmpty { DEFAULT_DEVICE_NAME }
-    }
+    /** Shared name for discovery and AirPlay /info; preserves Chinese room names. */
+    fun getDeviceName(context: Context): String =
+        com.weekd.miracastreceiver.discovery.DeviceInfoProvider(context).getDeviceName()
 
     /**
      * Returns the device's Wi-Fi or Ethernet MAC address.
@@ -132,7 +107,6 @@ object NetworkUtils {
     }
 
     // Constants
-    private const val DEFAULT_DEVICE_NAME = "PhairPlay"
     private const val FALLBACK_MAC_ADDRESS = "aa:bb:cc:dd:ee:ff"
     private const val PREFS_NAME = "phairplay_prefs"
     private const val PREF_KEY_DEVICE_UUID = "phairplay_device_uuid"

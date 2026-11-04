@@ -21,7 +21,7 @@ object DlnaXmlBuilder {
   <URLBase>$baseUrl</URLBase>
   <device>
     <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>
-    <friendlyName>$deviceName</friendlyName>
+    <friendlyName>${SoapParser.escapeXml(deviceName)}</friendlyName>
     <manufacturer>$manufacturer</manufacturer>
     <manufacturerURL>https://github.com</manufacturerURL>
     <modelDescription>Android TV DLNA MediaRenderer</modelDescription>
