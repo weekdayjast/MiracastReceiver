@@ -27,6 +27,10 @@
 
 ## 中文
 
+### AirPlay 投屏 YouTube 进展（2026-11-07）
+
+v1.2.13 + UxPlay 测试包已验证 YouTube 播放与换片，并修复镜像裁切、分辨率切换解码错误、有声音无画面及设备名称问题；字幕同步已实现，仍需完整回归。待解决广告自然结束后自动进入正片、手机画质选择与电视实际分辨率同步。上述结果针对测试包，尚不代表正式发布版。[详情](MiracastReceiver/AIRPLAY-YOUTUBE-STATUS.md)
+
 ### ✨ 功能特性
 
 - **🍎 AirPlay 支持**：完美支持 iPhone、iPad、Mac 投屏
