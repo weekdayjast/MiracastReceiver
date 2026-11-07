@@ -95,4 +95,34 @@
     <string name="notification_channel_name">Service de réception de diffusion</string>
     <string name="notification_channel_description">Maintient le service de réception de diffusion actif</string>
     <string name="notification_waiting">En attente de connexions AirPlay / DLNA / Miracast</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">En attente d’une adresse réseau. Vérifiez la connexion.</string>
+    <string name="status_receiver_running">Le récepteur fonctionne. En attente d’une connexion.</string>
+    <string name="status_receiver_stopped">Le récepteur est arrêté. Rouvrez l’application pour réessayer.</string>
+    <string name="status_miracast_checking">Vérification de la recopie d’écran Windows / Android…</string>
+    <string name="status_miracast_advertising">Détection Miracast configurée. Sous Windows, appuyez sur Win+K ; sous Android, ouvrez l’affichage sans fil. La détection dépend aussi du pilote.</string>
+    <string name="status_miracast_system">L’affichage sans fil du système est activé. Si l’appareil est absent de Win+K, ouvrez le récepteur de recopie du système et réessayez ; ce réglage ne garantit pas la réception.</string>
+    <string name="status_miracast_root_required">Recopie Windows / Android indisponible : accès root non accordé. Activez le récepteur de recopie du système s’il existe ; sinon, root est nécessaire pour activer la détection. AirPlay, DLNA et VLC Cast restent disponibles.</string>
+    <string name="status_miracast_failed">Impossible de configurer la recopie Windows / Android. Vérifiez la recopie du système, Wi-Fi Direct et l’accès root, puis rouvrez l’application. En cas d’échec, joignez les journaux ADB. Les autres méthodes restent disponibles.</string>
+    <string name="status_miracast_unsupported">Cet appareil ne propose pas Wi-Fi Direct, nécessaire à la recopie Windows / Android. Utilisez AirPlay, DLNA ou VLC Cast.</string>
+    <string name="status_miracast_permission">La recopie Windows / Android nécessite l’autorisation Appareils à proximité ou Position. Accordez-la dans les paramètres et rouvrez l’application.</string>
+    <string name="status_miracast_wifi_disabled">La recopie Windows / Android nécessite Wi-Fi Direct. Activez le Wi-Fi et rouvrez l’application ; Ethernet seul ne suffit pas.</string>
+    <string name="castplus_enable">Récepteur Huawei Cast+ (expérimental)</string>
+    <string name="castplus_off">Cast+ est désactivé. Activez-le pour tester la projection sans fil depuis un téléphone Huawei.</string>
+    <string name="castplus_unsupported">Cast+ nécessite Android 6 ou version ultérieure et un appareil ARM.</string>
+    <string name="castplus_permission">Cast+ nécessite la position et, à partir d’Android 13, l’autorisation Appareils à proximité. Accordez-les et rouvrez l’application.</string>
+    <string name="castplus_starting">Démarrage du récepteur Cast+…</string>
+    <string name="castplus_ready">Récepteur Cast+ prêt. Ouvrez la projection sans fil sur le téléphone Huawei.</string>
+    <string name="castplus_pairing">Cast+ attend une confirmation de connexion ou un code PIN.</string>
+    <string name="castplus_connecting">Connexion au téléphone Huawei…</string>
+    <string name="castplus_playing">Huawei Cast+ affiche l’écran du téléphone.</string>
+    <string name="castplus_paused">Huawei Cast+ est en pause.</string>
+    <string name="castplus_disconnecting">Déconnexion de Huawei Cast+…</string>
+    <string name="castplus_error">Échec du démarrage ou de la connexion Cast+. Désactivez puis réactivez Cast+ ; si le problème persiste, joignez les journaux ADB du récepteur.</string>
+    <string name="castplus_request">%1$s souhaite se connecter avec Huawei Cast+.</string>
+    <string name="castplus_pin">Saisissez ce code PIN sur le téléphone : %1$s</string>
+    <string name="castplus_exit">Arrêter la diffusion</string>
+    <string name="receiver_default_name">Téléviseur du salon</string>
+    <string name="subtitles_follow_sender">Sélectionnez les sous-titres sur l’appareil émetteur.</string>
 </resources>

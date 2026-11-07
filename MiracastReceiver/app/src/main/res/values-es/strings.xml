@@ -95,4 +95,34 @@
     <string name="notification_channel_name">Servicio receptor de transmisión</string>
     <string name="notification_channel_description">Mantiene activo el servicio receptor de transmisión</string>
     <string name="notification_waiting">Esperando conexiones AirPlay / DLNA / Miracast</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">Esperando una dirección de red. Comprueba la conexión.</string>
+    <string name="status_receiver_running">El receptor está activo. Esperando una conexión.</string>
+    <string name="status_receiver_stopped">El receptor está detenido. Vuelve a abrir la aplicación para reintentar.</string>
+    <string name="status_miracast_checking">Comprobando la duplicación de pantalla de Windows / Android…</string>
+    <string name="status_miracast_advertising">Detección de Miracast configurada. En Windows pulsa Win+K; en Android abre la pantalla inalámbrica. La detección también depende del controlador.</string>
+    <string name="status_miracast_system">La pantalla inalámbrica del sistema está activada. Si no aparece en Win+K, abre el receptor de duplicación del sistema y reintenta; este ajuste no garantiza que pueda recibir.</string>
+    <string name="status_miracast_root_required">Duplicación de Windows / Android no disponible: no se concedió acceso root. Activa primero el receptor de duplicación del sistema, si existe; de lo contrario se necesita root para habilitar la detección. Puedes seguir usando AirPlay, DLNA y VLC Cast.</string>
+    <string name="status_miracast_failed">No se pudo configurar la duplicación de Windows / Android. Comprueba la duplicación del sistema, Wi-Fi Direct y el acceso root; después vuelve a abrir la aplicación. Si falla, adjunta los registros ADB. Los otros métodos siguen disponibles.</string>
+    <string name="status_miracast_unsupported">Este dispositivo no ofrece Wi-Fi Direct, necesario para duplicar Windows / Android. Usa AirPlay, DLNA o VLC Cast.</string>
+    <string name="status_miracast_permission">La duplicación de Windows / Android necesita el permiso de dispositivos cercanos o ubicación. Concédelo en los ajustes y vuelve a abrir la aplicación.</string>
+    <string name="status_miracast_wifi_disabled">La duplicación de Windows / Android necesita Wi-Fi Direct. Activa Wi-Fi y vuelve a abrir la aplicación; Ethernet por sí solo no basta.</string>
+    <string name="castplus_enable">Receptor Huawei Cast+ (experimental)</string>
+    <string name="castplus_off">Cast+ está desactivado. Actívalo para probar la proyección inalámbrica desde un teléfono Huawei.</string>
+    <string name="castplus_unsupported">Cast+ requiere Android 6 o posterior y un dispositivo ARM.</string>
+    <string name="castplus_permission">Cast+ necesita ubicación y, desde Android 13, el permiso de dispositivos cercanos. Concédelos y vuelve a abrir la aplicación.</string>
+    <string name="castplus_starting">Iniciando el receptor Cast+…</string>
+    <string name="castplus_ready">Receptor Cast+ listo. Abre la proyección inalámbrica en el teléfono Huawei.</string>
+    <string name="castplus_pairing">Cast+ espera la confirmación de conexión o un PIN.</string>
+    <string name="castplus_connecting">Conectando al teléfono Huawei…</string>
+    <string name="castplus_playing">Huawei Cast+ está mostrando la pantalla del teléfono.</string>
+    <string name="castplus_paused">Huawei Cast+ está en pausa.</string>
+    <string name="castplus_disconnecting">Desconectando Huawei Cast+…</string>
+    <string name="castplus_error">No se pudo iniciar Cast+ o falló la conexión. Desactiva y activa Cast+ para reintentar; si persiste, adjunta los registros ADB del receptor.</string>
+    <string name="castplus_request">%1$s quiere conectarse mediante Huawei Cast+.</string>
+    <string name="castplus_pin">Introduce este PIN en el teléfono: %1$s</string>
+    <string name="castplus_exit">Detener transmisión</string>
+    <string name="receiver_default_name">TV del salón</string>
+    <string name="subtitles_follow_sender">Selecciona los subtítulos en el dispositivo emisor.</string>
 </resources>

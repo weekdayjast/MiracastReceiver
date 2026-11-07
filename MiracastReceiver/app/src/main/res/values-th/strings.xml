@@ -95,4 +95,34 @@
     <string name="notification_channel_name">บริการรับการแคสต์</string>
     <string name="notification_channel_description">ทำให้บริการรับการแคสต์ทำงานต่อเนื่อง</string>
     <string name="notification_waiting">กำลังรอการเชื่อมต่อ AirPlay / DLNA / Miracast</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">กำลังรอที่อยู่เครือข่าย โปรดตรวจสอบการเชื่อมต่อ</string>
+    <string name="status_receiver_running">บริการรับการแคสต์กำลังทำงาน กำลังรอการเชื่อมต่อ</string>
+    <string name="status_receiver_stopped">บริการรับการแคสต์หยุดแล้ว เปิดแอปใหม่เพื่อลองอีกครั้ง</string>
+    <string name="status_miracast_checking">กำลังตรวจสอบการสะท้อนหน้าจอ Windows / Android…</string>
+    <string name="status_miracast_advertising">ตั้งค่าการค้นหา Miracast แล้ว บน Windows กด Win+K ส่วน Android ให้เปิดจอแสดงผลไร้สาย การค้นหายังขึ้นอยู่กับไดรเวอร์ด้วย</string>
+    <string name="status_miracast_system">เปิดจอแสดงผลไร้สายของระบบแล้ว หากไม่พบใน Win+K ให้เปิดตัวรับการสะท้อนหน้าจอของระบบแล้วลองใหม่ การเปิดสวิตช์นี้เพียงอย่างเดียวไม่ยืนยันว่ารับภาพได้</string>
+    <string name="status_miracast_root_required">ใช้การสะท้อนหน้าจอ Windows / Android ไม่ได้ เนื่องจากไม่ได้รับสิทธิ์ root หากเครื่องมีตัวรับของระบบให้เปิดก่อน มิฉะนั้นต้องใช้ root เพื่อเปิดการค้นหา ยังใช้ AirPlay, DLNA และ VLC Cast ได้</string>
+    <string name="status_miracast_failed">ตั้งค่าการสะท้อนหน้าจอ Windows / Android ไม่สำเร็จ ตรวจสอบตัวรับของระบบ Wi-Fi Direct และสิทธิ์ root แล้วเปิดแอปใหม่ หากยังล้มเหลวให้แนบบันทึก ADB ยังใช้วิธีแคสต์อื่นได้</string>
+    <string name="status_miracast_unsupported">อุปกรณ์นี้ไม่มี Wi-Fi Direct ซึ่งจำเป็นสำหรับการสะท้อนหน้าจอ Windows / Android โปรดใช้ AirPlay, DLNA หรือ VLC Cast</string>
+    <string name="status_miracast_permission">การสะท้อนหน้าจอ Windows / Android ต้องใช้สิทธิ์อุปกรณ์ใกล้เคียงหรือตำแหน่ง อนุญาตในการตั้งค่าแล้วเปิดแอปใหม่</string>
+    <string name="status_miracast_wifi_disabled">การสะท้อนหน้าจอ Windows / Android ต้องใช้ Wi-Fi Direct เปิด Wi-Fi แล้วเปิดแอปใหม่ การเชื่อมต่อ Ethernet เพียงอย่างเดียวไม่เพียงพอ</string>
+    <string name="castplus_enable">ตัวรับ Huawei Cast+ (ทดลอง)</string>
+    <string name="castplus_off">ปิด Cast+ อยู่ เปิดเพื่อทดสอบการฉายภาพไร้สายจากโทรศัพท์ Huawei</string>
+    <string name="castplus_unsupported">Cast+ ต้องใช้ Android 6 ขึ้นไปและอุปกรณ์ ARM</string>
+    <string name="castplus_permission">Cast+ ต้องใช้สิทธิ์ตำแหน่ง และสิทธิ์อุปกรณ์ใกล้เคียงบน Android 13 ขึ้นไป อนุญาตแล้วเปิดแอปใหม่</string>
+    <string name="castplus_starting">กำลังเริ่มตัวรับ Cast+…</string>
+    <string name="castplus_ready">ตัวรับ Cast+ พร้อมแล้ว เปิดการฉายภาพไร้สายบนโทรศัพท์ Huawei</string>
+    <string name="castplus_pairing">Cast+ กำลังรอการยืนยันการเชื่อมต่อหรือ PIN</string>
+    <string name="castplus_connecting">กำลังเชื่อมต่อโทรศัพท์ Huawei…</string>
+    <string name="castplus_playing">Huawei Cast+ กำลังแสดงหน้าจอโทรศัพท์</string>
+    <string name="castplus_paused">Huawei Cast+ หยุดชั่วคราว</string>
+    <string name="castplus_disconnecting">กำลังตัดการเชื่อมต่อ Huawei Cast+…</string>
+    <string name="castplus_error">เริ่ม Cast+ หรือเชื่อมต่อไม่สำเร็จ ปิดแล้วเปิด Cast+ เพื่อลองใหม่ หากยังล้มเหลวให้แนบบันทึก ADB ของตัวรับ</string>
+    <string name="castplus_request">%1$s ต้องการเชื่อมต่อผ่าน Huawei Cast+</string>
+    <string name="castplus_pin">ป้อน PIN นี้บนโทรศัพท์: %1$s</string>
+    <string name="castplus_exit">หยุดแคสต์</string>
+    <string name="receiver_default_name">ทีวีห้องนั่งเล่น</string>
+    <string name="subtitles_follow_sender">เลือกคำบรรยายบนอุปกรณ์ที่ส่งภาพ</string>
 </resources>

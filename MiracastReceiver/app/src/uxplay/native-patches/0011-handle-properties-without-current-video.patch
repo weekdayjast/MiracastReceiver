@@ -1,0 +1,15 @@
+diff --git a/lib/http_handlers.h b/lib/http_handlers.h
+--- a/lib/http_handlers.h
++++ b/lib/http_handlers.h
+@@ -182,3 +182,9 @@
+-    airplay_video_t *airplay_video = (airplay_video_t *) hls_get_current_video(raop);
+-    assert(airplay_video);
+     if (!strcmp(property, "selectedMediaArray")) {
++        /* Property requests can arrive after playlistRemove or before the next /play.
++         * Only media selection needs an active video; other properties must not look it up. */
++        airplay_video_t *airplay_video = (airplay_video_t *) hls_get_current_video(raop);
++        if (!airplay_video) {
++            logger_log(raop->logger, LOGGER_INFO,
++                       "Ignoring selectedMediaArray without an active video");
++            goto post_error;
++        }

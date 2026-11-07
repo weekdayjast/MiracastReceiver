@@ -95,4 +95,34 @@
     <string name="notification_channel_name">कास्ट रिसीवर सेवा</string>
     <string name="notification_channel_description">कास्ट रिसीवर सेवा को चालू रखती है</string>
     <string name="notification_waiting">AirPlay / DLNA / Miracast कनेक्शन की प्रतीक्षा</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">नेटवर्क पते की प्रतीक्षा है। कनेक्शन जाँचें।</string>
+    <string name="status_receiver_running">रिसीवर सेवा चल रही है। कनेक्शन की प्रतीक्षा है।</string>
+    <string name="status_receiver_stopped">रिसीवर सेवा बंद है। फिर कोशिश करने के लिए ऐप दोबारा खोलें।</string>
+    <string name="status_miracast_checking">Windows / Android स्क्रीन मिररिंग की जाँच हो रही है…</string>
+    <string name="status_miracast_advertising">Miracast खोज सेट है। Windows पर Win+K दबाएँ और Android पर वायरलेस डिस्प्ले खोलें। खोज ड्राइवर के समर्थन पर भी निर्भर है।</string>
+    <string name="status_miracast_system">सिस्टम का Wi-Fi डिस्प्ले चालू है। Win+K में डिवाइस न दिखे तो सिस्टम स्क्रीन मिररिंग रिसीवर खोलकर फिर कोशिश करें। केवल यह सेटिंग रिसीवर समर्थन की पुष्टि नहीं करती।</string>
+    <string name="status_miracast_root_required">रूट अनुमति न मिलने से Windows / Android स्क्रीन मिररिंग उपलब्ध नहीं है। सिस्टम रिसीवर हो तो पहले उसे चालू करें; अन्यथा खोज चालू करने के लिए रूट चाहिए। AirPlay, DLNA और VLC Cast का उपयोग कर सकते हैं।</string>
+    <string name="status_miracast_failed">Windows / Android स्क्रीन मिररिंग सेट नहीं हो सकी। सिस्टम मिररिंग, Wi-Fi Direct और रूट अनुमति जाँचकर ऐप दोबारा खोलें। समस्या बनी रहे तो ADB लॉग संलग्न करें। अन्य कास्ट तरीके उपलब्ध हैं।</string>
+    <string name="status_miracast_unsupported">इस डिवाइस में Windows / Android स्क्रीन मिररिंग के लिए आवश्यक Wi-Fi Direct नहीं है। AirPlay, DLNA या VLC Cast का उपयोग करें।</string>
+    <string name="status_miracast_permission">Windows / Android स्क्रीन मिररिंग के लिए आस-पास के डिवाइस या स्थान की अनुमति चाहिए। सेटिंग में अनुमति देकर ऐप दोबारा खोलें।</string>
+    <string name="status_miracast_wifi_disabled">Windows / Android स्क्रीन मिररिंग के लिए Wi-Fi Direct चाहिए। Wi-Fi चालू करके ऐप दोबारा खोलें; केवल Ethernet पर्याप्त नहीं है।</string>
+    <string name="castplus_enable">Huawei Cast+ रिसीवर (प्रायोगिक)</string>
+    <string name="castplus_off">Cast+ बंद है। Huawei फ़ोन से वायरलेस प्रोजेक्शन जाँचने के लिए इसे चालू करें।</string>
+    <string name="castplus_unsupported">Cast+ के लिए Android 6 या नया और ARM डिवाइस चाहिए।</string>
+    <string name="castplus_permission">Cast+ को स्थान की अनुमति और Android 13 या नए पर आस-पास के डिवाइस की अनुमति चाहिए। अनुमति देकर ऐप दोबारा खोलें।</string>
+    <string name="castplus_starting">Cast+ रिसीवर शुरू हो रहा है…</string>
+    <string name="castplus_ready">Cast+ रिसीवर तैयार है। Huawei फ़ोन पर वायरलेस प्रोजेक्शन खोलें।</string>
+    <string name="castplus_pairing">Cast+ कनेक्शन की पुष्टि या PIN की प्रतीक्षा कर रहा है।</string>
+    <string name="castplus_connecting">Huawei फ़ोन से कनेक्ट हो रहा है…</string>
+    <string name="castplus_playing">Huawei Cast+ फ़ोन की स्क्रीन दिखा रहा है।</string>
+    <string name="castplus_paused">Huawei Cast+ रुका हुआ है।</string>
+    <string name="castplus_disconnecting">Huawei Cast+ डिस्कनेक्ट हो रहा है…</string>
+    <string name="castplus_error">Cast+ शुरू नहीं हुआ या कनेक्शन विफल रहा। Cast+ बंद करके फिर चालू करें; समस्या बनी रहे तो रिसीवर के ADB लॉग संलग्न करें।</string>
+    <string name="castplus_request">%1$s Huawei Cast+ से कनेक्ट करना चाहता है।</string>
+    <string name="castplus_pin">फ़ोन पर यह PIN दर्ज करें: %1$s</string>
+    <string name="castplus_exit">कास्ट बंद करें</string>
+    <string name="receiver_default_name">बैठक का टीवी</string>
+    <string name="subtitles_follow_sender">भेजने वाले डिवाइस पर उपशीर्षक चुनें।</string>
 </resources>

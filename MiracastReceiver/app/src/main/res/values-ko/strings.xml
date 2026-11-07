@@ -95,4 +95,34 @@
     <string name="notification_channel_name">캐스트 수신 서비스</string>
     <string name="notification_channel_description">캐스트 수신 서비스를 계속 실행합니다</string>
     <string name="notification_waiting">AirPlay / DLNA / Miracast 연결 대기 중</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">네트워크 주소를 기다리는 중입니다. 연결을 확인하세요.</string>
+    <string name="status_receiver_running">수신 서비스가 실행 중입니다. 연결을 기다립니다.</string>
+    <string name="status_receiver_stopped">수신 서비스가 중지되었습니다. 앱을 다시 열어 재시도하세요.</string>
+    <string name="status_miracast_checking">Windows / Android 화면 미러링 확인 중…</string>
+    <string name="status_miracast_advertising">Miracast 검색이 설정되었습니다. Windows에서는 Win+K를 누르고 Android에서는 무선 디스플레이를 여세요. 검색은 드라이버 지원에도 영향을 받습니다.</string>
+    <string name="status_miracast_system">시스템 무선 디스플레이가 켜져 있습니다. Win+K에 기기가 없으면 시스템 화면 미러링 수신 기능을 열고 다시 시도하세요. 이 설정만으로 수신 지원을 확인할 수는 없습니다.</string>
+    <string name="status_miracast_root_required">루트 권한이 없어 Windows / Android 화면 미러링을 사용할 수 없습니다. 시스템 수신 기능이 있으면 먼저 켜세요. 그 외에는 검색을 위해 루트 권한이 필요합니다. AirPlay, DLNA, VLC Cast는 계속 사용할 수 있습니다.</string>
+    <string name="status_miracast_failed">Windows / Android 화면 미러링을 설정하지 못했습니다. 시스템 미러링, Wi-Fi Direct 및 루트 권한을 확인하고 앱을 다시 여세요. 계속 실패하면 ADB 로그를 첨부하세요. 다른 전송 방식은 사용할 수 있습니다.</string>
+    <string name="status_miracast_unsupported">이 기기는 Windows / Android 화면 미러링에 필요한 Wi-Fi Direct를 제공하지 않습니다. AirPlay, DLNA 또는 VLC Cast를 사용하세요.</string>
+    <string name="status_miracast_permission">Windows / Android 화면 미러링에는 주변 기기 또는 위치 권한이 필요합니다. 설정에서 허용하고 앱을 다시 여세요.</string>
+    <string name="status_miracast_wifi_disabled">Windows / Android 화면 미러링에는 Wi-Fi Direct가 필요합니다. Wi-Fi를 켜고 앱을 다시 여세요. 이더넷 연결만으로는 부족합니다.</string>
+    <string name="castplus_enable">Huawei Cast+ 수신기(실험적)</string>
+    <string name="castplus_off">Cast+가 꺼져 있습니다. 켜서 Huawei 휴대전화의 무선 화면 전송을 테스트하세요.</string>
+    <string name="castplus_unsupported">Cast+에는 Android 6 이상과 ARM 기기가 필요합니다.</string>
+    <string name="castplus_permission">Cast+에는 위치 권한과 Android 13 이상에서 주변 기기 권한이 필요합니다. 허용하고 앱을 다시 여세요.</string>
+    <string name="castplus_starting">Cast+ 수신기 시작 중…</string>
+    <string name="castplus_ready">Cast+ 수신기가 준비되었습니다. Huawei 휴대전화에서 무선 화면 전송을 여세요.</string>
+    <string name="castplus_pairing">Cast+가 연결 확인 또는 PIN을 기다리고 있습니다.</string>
+    <string name="castplus_connecting">Huawei 휴대전화에 연결 중…</string>
+    <string name="castplus_playing">Huawei Cast+가 휴대전화 화면을 표시하고 있습니다.</string>
+    <string name="castplus_paused">Huawei Cast+가 일시중지되었습니다.</string>
+    <string name="castplus_disconnecting">Huawei Cast+ 연결 해제 중…</string>
+    <string name="castplus_error">Cast+ 시작 또는 연결에 실패했습니다. Cast+를 껐다 켜서 다시 시도하세요. 계속 실패하면 수신기의 ADB 로그를 첨부하세요.</string>
+    <string name="castplus_request">%1$s에서 Huawei Cast+로 연결하려고 합니다.</string>
+    <string name="castplus_pin">휴대전화에 이 PIN을 입력하세요: %1$s</string>
+    <string name="castplus_exit">화면 전송 중지</string>
+    <string name="receiver_default_name">거실 TV</string>
+    <string name="subtitles_follow_sender">송신 기기에서 자막을 선택하세요.</string>
 </resources>

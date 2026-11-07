@@ -121,4 +121,8 @@
     <string name="castplus_request">设备 %1$s 请求通过华为 Cast+ 投屏。</string>
     <string name="castplus_pin">请在手机上输入 PIN：%1$s</string>
     <string name="castplus_exit">退出投屏</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="receiver_default_name">客厅电视</string>
+    <string name="subtitles_follow_sender">请在发送端设备选择字幕。</string>
 </resources>

@@ -95,4 +95,34 @@
     <string name="notification_channel_name">Служба приёма трансляций</string>
     <string name="notification_channel_description">Поддерживает работу службы приёма трансляций</string>
     <string name="notification_waiting">Ожидание подключений AirPlay / DLNA / Miracast</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">Ожидание сетевого адреса. Проверьте подключение.</string>
+    <string name="status_receiver_running">Служба приёма работает. Ожидание подключения.</string>
+    <string name="status_receiver_stopped">Служба приёма остановлена. Откройте приложение заново.</string>
+    <string name="status_miracast_checking">Проверка трансляции экрана Windows / Android…</string>
+    <string name="status_miracast_advertising">Обнаружение Miracast настроено. В Windows нажмите Win+K, в Android откройте беспроводной дисплей. Обнаружение также зависит от драйвера.</string>
+    <string name="status_miracast_system">Беспроводной дисплей системы включён. Если устройства нет в Win+K, откройте системный приёмник трансляции и повторите попытку. Этот переключатель сам по себе не подтверждает поддержку приёма.</string>
+    <string name="status_miracast_root_required">Трансляция Windows / Android недоступна: нет root-доступа. Сначала включите системный приёмник, если он есть; иначе для обнаружения нужен root. AirPlay, DLNA и VLC Cast остаются доступны.</string>
+    <string name="status_miracast_failed">Не удалось настроить трансляцию Windows / Android. Проверьте системную трансляцию, Wi-Fi Direct и root-доступ, затем откройте приложение заново. При повторном сбое приложите журналы ADB. Другие способы трансляции доступны.</string>
+    <string name="status_miracast_unsupported">На устройстве нет Wi-Fi Direct, необходимого для трансляции Windows / Android. Используйте AirPlay, DLNA или VLC Cast.</string>
+    <string name="status_miracast_permission">Для трансляции Windows / Android нужно разрешение на устройства поблизости или местоположение. Предоставьте его в настройках и откройте приложение заново.</string>
+    <string name="status_miracast_wifi_disabled">Для трансляции Windows / Android нужен Wi-Fi Direct. Включите Wi-Fi и откройте приложение заново; одного Ethernet недостаточно.</string>
+    <string name="castplus_enable">Приёмник Huawei Cast+ (экспериментальный)</string>
+    <string name="castplus_off">Cast+ выключен. Включите его для проверки беспроводной проекции с телефона Huawei.</string>
+    <string name="castplus_unsupported">Для Cast+ нужны Android 6 или новее и устройство ARM.</string>
+    <string name="castplus_permission">Cast+ нужно разрешение на местоположение, а на Android 13 и новее — также на устройства поблизости. Предоставьте их и откройте приложение заново.</string>
+    <string name="castplus_starting">Запуск приёмника Cast+…</string>
+    <string name="castplus_ready">Приёмник Cast+ готов. Откройте беспроводную проекцию на телефоне Huawei.</string>
+    <string name="castplus_pairing">Cast+ ожидает подтверждения подключения или PIN-кода.</string>
+    <string name="castplus_connecting">Подключение к телефону Huawei…</string>
+    <string name="castplus_playing">Huawei Cast+ показывает экран телефона.</string>
+    <string name="castplus_paused">Huawei Cast+ приостановлен.</string>
+    <string name="castplus_disconnecting">Отключение Huawei Cast+…</string>
+    <string name="castplus_error">Не удалось запустить Cast+ или установить соединение. Выключите и включите Cast+; если сбой повторится, приложите журналы ADB приёмника.</string>
+    <string name="castplus_request">%1$s запрашивает подключение через Huawei Cast+.</string>
+    <string name="castplus_pin">Введите этот PIN-код на телефоне: %1$s</string>
+    <string name="castplus_exit">Остановить трансляцию</string>
+    <string name="receiver_default_name">Телевизор в гостиной</string>
+    <string name="subtitles_follow_sender">Выберите субтитры на передающем устройстве.</string>
 </resources>

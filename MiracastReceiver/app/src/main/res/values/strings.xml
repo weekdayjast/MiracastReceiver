@@ -124,4 +124,8 @@
     <string name="castplus_request">%1$s wants to connect using Huawei Cast+.</string>
     <string name="castplus_pin">Enter this PIN on the phone: %1$s</string>
     <string name="castplus_exit">Stop casting</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="receiver_default_name">Living room TV</string>
+    <string name="subtitles_follow_sender">Choose subtitles on the sending device.</string>
 </resources>
