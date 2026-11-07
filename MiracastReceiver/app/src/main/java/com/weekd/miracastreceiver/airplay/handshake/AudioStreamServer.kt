@@ -111,6 +111,26 @@ class AudioStreamServer(
     /** UDP control port (returned in the SETUP response; macOS won't send audio without it). */
     val controlPort: Int get() = controlSocket.localPort
 
+    // ─── Audio-only grace support ────────────────────────────────────────────
+    // iOS may close the RTSP control connection while RTP keeps arriving here. RtspHandler polls
+    // lastPacketAgeMs to decide whether the session is still alive, instead of killing this server
+    // at the control-socket EOF.
+    @Volatile private var lastRtpAtMs = 0L
+    @Volatile private var rtpPacketsReceived = 0L
+
+    /** Milliseconds since the last RTP data packet; Long.MAX_VALUE before the first packet. */
+    val lastPacketAgeMs: Long get() {
+        val t = lastRtpAtMs
+        return if (t == 0L) Long.MAX_VALUE else System.currentTimeMillis() - t
+    }
+
+    /** Total RTP data packets received (for diagnostics). */
+    val packetsReceived: Long get() = rtpPacketsReceived
+
+    /** True when a repeated SETUP asks for exactly the stream this server is already playing. */
+    fun matches(sr: Int, ch: Int, ct: Int, spf: Int): Boolean =
+        running && sampleRate == sr && channels == ch && codecType == ct && framesPerPacket == spf
+
     fun start(scope: CoroutineScope) {
         running = true
         StreamStats.audioActive = true
@@ -175,6 +195,8 @@ class AudioStreamServer(
                 packet.length = buf.size      // reset capacity — receive() shrinks length to the last datagram
                 socket.receive(packet)
                 recv++
+                lastRtpAtMs = System.currentTimeMillis()
+                rtpPacketsReceived++
                 StreamStats.audioBytesTotal += packet.length
                 if (rtpCount < 6) {
                     Logger.i("Audio RTP[$rtpCount] ${packet.length}B hdr: ${hex(packet.data, minOf(20, packet.length))}")
