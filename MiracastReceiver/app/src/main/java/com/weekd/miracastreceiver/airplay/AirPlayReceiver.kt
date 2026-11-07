@@ -291,13 +291,7 @@ class AirPlayReceiver(
             onRemoteControlInfo = { dacpId, activeRemote -> dacpClient.configure(dacpId, activeRemote) },
             pinAuthEnabled = pinAuthEnabled,
             pairingStore = pairingStore,
-            onShowPin = { pin -> onPinChanged(pin) },
-            // Audio-only: keep the UDP audio server alive after the control socket closes, as long
-            // as RTP is still arriving. Realtime ALAC sends ~92 packets/s, so a 3 s gap means the
-            // sender really stopped.
-            isAudioOnlyFlowing = {
-                (audioServer?.lastPacketAgeMs ?: Long.MAX_VALUE) < AUDIO_ONLY_FLOWING_WITHIN_MS
-            }
+            onShowPin = { pin -> onPinChanged(pin) }
         ).also { it.start(scope) }
         Logger.i("RTSP handler started on port 7000 (audioEnabled=$audioEnabled pinAuth=$pinAuthEnabled)")
     }
@@ -523,18 +517,6 @@ class AirPlayReceiver(
         val aesKey = mirrorAesKey ?: run { Logger.e("audio start before keys set"); return 0 to 0 }
         val ecdhSecret = mirrorEcdhSecret ?: return 0 to 0
         val aesIv = mirrorAesIv ?: return 0 to 0
-        // An audio-only sender may open a new control connection and repeat SETUP while the UDP
-        // stream is still playing. Reuse the running server (same ports/keys) instead of replacing
-        // it — replacing it would close the socket the phone is currently sending to. Restrict the
-        // reuse to the ALAC audio-only profile (ct=2); mirror audio (ct=8) always gets a fresh
-        // server so a new session's keys are never mixed with an old decryptor.
-        val existing = audioServer
-        if (codecType == 2 && existing != null &&
-            existing.matches(sampleRate, channels, codecType, framesPerPacket)) {
-            Logger.i("Audio-only: re-SETUP reuses running audio server on port ${existing.dataPort} (recv=${existing.packetsReceived}, ageMs=${existing.lastPacketAgeMs})")
-            return existing.dataPort to existing.controlPort
-        }
-        existing?.stop()
         val server = AudioStreamServer(aesKey, ecdhSecret, aesIv, sampleRate, channels, codecType, framesPerPacket)
             .also { audioServer = it; it.start(scope) }
         audioPlaying = true
@@ -729,9 +711,6 @@ class AirPlayReceiver(
          * ALAC frames are typically ≤ 8 KB. 16 KB is a safe upper bound.
          */
         private const val MAX_AUDIO_PACKET_BYTES = 16 * 1024
-
-        /** RTP gap that still counts as "audio flowing" for the audio-only grace guard. */
-        private const val AUDIO_ONLY_FLOWING_WITHIN_MS = 3_000L
     }
 }
 
