@@ -35,6 +35,13 @@ object PlistCodec {
      * @throws IllegalArgumentException if the root element is not a dictionary.
      */
     fun decode(bytes: ByteArray): Map<String, Any?> {
+        // Use the in-project binary plist reader. dd-plist's PropertyListParser needs a
+        // desugared-lambda synthetic class that is not reachable at runtime here, which
+        // made the first real decode (AirPlay 2 mirror SETUP) fail with
+        // NoClassDefFoundError -> 400 Bad Request. XML plists still go through dd-plist.
+        if (bytes.size >= 8 && String(bytes, 0, 8, Charsets.US_ASCII) == "bplist00") {
+            return BPlist.parse(bytes)
+        }
         val root = PropertyListParser.parse(bytes)
         @Suppress("UNCHECKED_CAST")
         return (fromNs(root) as? Map<String, Any?>)
