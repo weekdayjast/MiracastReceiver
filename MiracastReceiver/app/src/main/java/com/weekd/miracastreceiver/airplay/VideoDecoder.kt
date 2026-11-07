@@ -122,7 +122,7 @@ class VideoDecoder(private val outputSurface: Surface) {
         StreamStats.videoCodec = mimeType
 
         // Describe the negotiated stream to the hardware decoder.
-        val format = MediaFormat.createVideoFormat(
+        fun createFormat(lowLatency: Boolean) = MediaFormat.createVideoFormat(
             mimeType,
             actualWidth,
             actualHeight
@@ -140,17 +140,17 @@ class VideoDecoder(private val outputSurface: Surface) {
             // adaptive playback (BadParameter / buffer-count failures) and produces banding.
             // Resolution changes are handled by recreating the decoder in MirrorStreamServer.
 
-            // 低延迟提示。屏幕镜像（AirPlay / Miracast）要的是「解出一帧立刻显示」，
-            // 而解码器默认会攒几帧输出缓冲以提高吞吐，那会平白增加上百毫秒延迟。
-            // 解码器不认识的 key 会被忽略，所以这里全部设上、按平台各取所需：
-            setInteger("low-latency", 1)                        // Android 11+ 标准 key
-            setInteger("vendor.qti-ext-dec-low-latency.enable", 1)  // 高通
-            setInteger("vendor.low-latency.enable", 1)              // 部分联发科/展锐
+            // Some MTK codecs reject these hints instead of ignoring them.
+            if (lowLatency) {
+                setInteger("low-latency", 1)
+                setInteger("vendor.qti-ext-dec-low-latency.enable", 1)
+                setInteger("vendor.low-latency.enable", 1)
+            }
             setInteger(MediaFormat.KEY_PRIORITY, 0)            // 0 = 实时任务
         }
 
         // Use the same HEVC decoder whose 4K capability was advertised to the sender.
-        mediaCodec = if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) {
+        fun createCodec() = if (mimeType == MediaFormat.MIMETYPE_VIDEO_HEVC) {
             val decoderName = requireNotNull(AirPlayCapabilities.hevcDecoderName(actualWidth, actualHeight)) {
                 "No compatible HEVC hardware decoder"
             }
@@ -159,13 +159,30 @@ class VideoDecoder(private val outputSurface: Surface) {
             MediaCodec.createDecoderByType(mimeType)
         }
 
-        // Configure the decoder:
-        // - format: what the input will look like (H.264, width, height, SPS/PPS)
-        // - outputSurface: where decoded frames go (directly to screen — no intermediate copy)
-        // - crypto: null (we handle decryption before this point, if needed)
-        // - flags: 0 (0 = decoder mode; CONFIGURE_FLAG_ENCODE would be for encoding)
-        mediaCodec!!.configure(format, outputSurface, null, 0)
-        mediaCodec!!.start()
+        fun configureAndStart(lowLatency: Boolean): MediaCodec {
+            val codec = createCodec()
+            try {
+                // Build fresh CSD buffers for each attempt; configure may consume them.
+                codec.configure(createFormat(lowLatency), outputSurface, null, 0)
+                codec.start()
+                return codec
+            } catch (failure: Exception) {
+                runCatching { codec.release() }.onFailure { failure.addSuppressed(it) }
+                throw failure
+            }
+        }
+
+        mediaCodec = try {
+            configureAndStart(true)
+        } catch (firstFailure: Exception) {
+            Logger.w("VideoDecoder low-latency initialization failed; retrying without hints: ${firstFailure.message}")
+            try {
+                configureAndStart(false)
+            } catch (fallbackFailure: Exception) {
+                fallbackFailure.addSuppressed(firstFailure)
+                throw fallbackFailure
+            }
+        }
 
         isInitialized = true
         startOutputThread()
