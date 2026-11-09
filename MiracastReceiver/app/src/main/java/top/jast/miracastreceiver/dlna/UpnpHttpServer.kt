@@ -152,7 +152,7 @@ class UpnpHttpServer(
     }
 
     private fun handleAvTransportControl(output: OutputStream, body: String, headers: Map<String, String>) {
-        val action = SoapParser.extractAction(headers["SOAPACTION"] ?: headers["SOAPAction"])
+        val action = soapAction(headers)
         Timber.i("AVTransport action: $action")
 
         // 调试：打印完整请求体，帮助排查 Emby 的格式
@@ -283,28 +283,28 @@ class UpnpHttpServer(
     }
 
     private fun handleRenderingControl(output: OutputStream, body: String, headers: Map<String, String>) {
-        val action = SoapParser.extractAction(headers["SOAPACTION"] ?: headers["SOAPAction"])
+        val action = soapAction(headers)
         Timber.i("RenderingControl action: $action")
 
         val response = when (action) {
             "GetVolume" -> {
                 val state = renderer.getState()
-                buildSoapResponse(action, "<CurrentVolume>${state.volume}</CurrentVolume>")
+                buildSoapResponse(action, "<CurrentVolume>${state.volume}</CurrentVolume>", "RenderingControl")
             }
             "SetVolume" -> {
                 val volume = SoapParser.extractTagValue(body, "DesiredVolume").toIntOrNull() ?: 50
                 renderer.setVolume(volume)
-                buildSoapResponse(action, "")
+                buildSoapResponse(action, "", "RenderingControl")
             }
             "GetMute" -> {
                 val state = renderer.getState()
                 val mute = if (state.muted) "1" else "0"
-                buildSoapResponse(action, "<CurrentMute>$mute</CurrentMute>")
+                buildSoapResponse(action, "<CurrentMute>$mute</CurrentMute>", "RenderingControl")
             }
             "SetMute" -> {
                 val mute = SoapParser.extractTagValue(body, "DesiredMute") == "1"
                 renderer.setMute(mute)
-                buildSoapResponse(action, "")
+                buildSoapResponse(action, "", "RenderingControl")
             }
             else -> buildSoapFault("401", "Invalid Action")
         }
@@ -313,7 +313,7 @@ class UpnpHttpServer(
     }
 
     private fun handleConnectionManager(output: OutputStream, body: String, headers: Map<String, String>) {
-        val action = SoapParser.extractAction(headers["SOAPACTION"] ?: headers["SOAPAction"])
+        val action = soapAction(headers)
         Timber.i("ConnectionManager action: $action")
 
         val response = when (action) {
@@ -322,10 +322,10 @@ class UpnpHttpServer(
                     <Source></Source>
                     <Sink>http-get:*:video/*:*,http-get:*:audio/*:*,http-get:*:image/*:*</Sink>
                 """.trimIndent()
-                buildSoapResponse(action, content)
+                buildSoapResponse(action, content, "ConnectionManager")
             }
             "GetCurrentConnectionIDs" -> {
-                buildSoapResponse(action, "<ConnectionIDs>0</ConnectionIDs>")
+                buildSoapResponse(action, "<ConnectionIDs>0</ConnectionIDs>", "ConnectionManager")
             }
             "GetCurrentConnectionInfo" -> {
                 val content = """
@@ -337,7 +337,7 @@ class UpnpHttpServer(
                     <Direction>Input</Direction>
                     <Status>OK</Status>
                 """.trimIndent()
-                buildSoapResponse(action, content)
+                buildSoapResponse(action, content, "ConnectionManager")
             }
             else -> buildSoapFault("401", "Invalid Action")
         }
@@ -352,11 +352,14 @@ class UpnpHttpServer(
         output.flush()
     }
 
-    private fun buildSoapResponse(action: String, content: String): String {
+    private fun soapAction(headers: Map<String, String>): String =
+        SoapParser.extractAction(headers.entries.firstOrNull { it.key.equals("SOAPAction", ignoreCase = true) }?.value)
+
+    private fun buildSoapResponse(action: String, content: String, service: String = "AVTransport"): String {
         return """<?xml version="1.0" encoding="utf-8"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
   <s:Body>
-    <u:${action}Response xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
+    <u:${action}Response xmlns:u="urn:schemas-upnp-org:service:$service:1">
       $content
     </u:${action}Response>
   </s:Body>

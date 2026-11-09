@@ -163,6 +163,7 @@ class AirPlayReceiver(
                 onStopped = { lifecycle.sessionEnded() },
                 onAdvertising = { name -> onActualNameRegistered(name); emitState(AirPlayState.ADVERTISING) },
                 onError = { emitState(AirPlayState.ERROR) },
+                initialResolution = mirrorResolution,
             ).also { it.start() }
             return
         }
@@ -265,6 +266,7 @@ class AirPlayReceiver(
     fun updateDisplayResolution(width: Int, height: Int) {
         require(width > 0 && height > 0)
         mirrorResolution = width to height
+        uxPlayReceiver?.updateDisplayResolution(width, height)
         rtspHandler?.updateDisplayResolution(width, height)
         Logger.i("AirPlay display declaration updated: ${width}x$height; sender must re-read /info")
     }

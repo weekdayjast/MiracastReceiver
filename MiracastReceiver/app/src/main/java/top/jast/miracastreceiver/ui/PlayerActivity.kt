@@ -166,7 +166,7 @@ class PlayerActivity : AppCompatActivity() {
     private var rotationDegrees = 0
     private var manualRotationDegrees = 0
     private var autoRotationDegrees = 0
-    private var miracastContent = RectF(0f, 0f, 1f, 1f)
+    private var mirrorContent = RectF(0f, 0f, 1f, 1f)
     private var cropCandidate: RectF? = null
     private var cropConfirmations = 0
     private var cropCopyPending = false
@@ -622,7 +622,7 @@ class PlayerActivity : AppCompatActivity() {
         manualRotationDegrees = 0
         autoRotationDegrees = 0
         cropSession++
-        miracastContent = RectF(0f, 0f, 1f, 1f)
+        mirrorContent = RectF(0f, 0f, 1f, 1f)
         cropCandidate = null
         cropConfirmations = 0
         lastCropSampleAt = 0L
@@ -744,7 +744,7 @@ class PlayerActivity : AppCompatActivity() {
             var lastParentW = 0
             var lastParentH = 0
             while (isActive) {
-                sampleMiracastContent()
+                sampleMirrorContent()
                 val videoW = StreamStats.videoWidth
                 val videoH = StreamStats.videoHeight
                 // 手动旋转后父视图宽高会对调，也要重新适配，否则画面仍按旋转前的框显示
@@ -1349,11 +1349,12 @@ class PlayerActivity : AppCompatActivity() {
     private fun isMirrorSession() = isAirPlayMirrorSession || isMiracastSession
 
     private fun activeMirrorCrop(): RectF =
-        if (isMiracastSession && (autoRotateToFit || manualRotationDegrees != 0)) miracastContent else RectF(0f, 0f, 1f, 1f)
+        if (isMirrorSession() && (autoRotateToFit || manualRotationDegrees != 0)) mirrorContent else RectF(0f, 0f, 1f, 1f)
 
-    /** 只分析 Miracast 原始解码帧，避免把旋转后的显示结果再次当作输入。 */
-    private fun sampleMiracastContent() {
-        if (Build.VERSION.SDK_INT < 24 || !isMiracastSession ||
+    /** PixelCopy reads the Surface buffer before the TextureView's display transform.
+     * AirPlay also embeds portrait content in a landscape frame with side bars. */
+    private fun sampleMirrorContent() {
+        if (Build.VERSION.SDK_INT < 24 || !isMirrorSession() ||
             (!top.jast.miracastreceiver.util.AppSettings.isAutoRotateToFit(this) && manualRotationDegrees == 0) || cropCopyPending) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastCropSampleAt < 1000) return
@@ -1366,8 +1367,8 @@ class PlayerActivity : AppCompatActivity() {
             PixelCopy.request(surface, bitmap, { result ->
                 cropCopyPending = false
                 try {
-                    if (result == PixelCopy.SUCCESS && session == cropSession && !isDestroyed && isMiracastSession) {
-                        detectMiracastContent(bitmap)
+                    if (result == PixelCopy.SUCCESS && session == cropSession && !isDestroyed && isMirrorSession()) {
+                        detectMirrorContent(bitmap)
                     }
                 } finally { bitmap.recycle() }
             }, Handler(Looper.getMainLooper()))
@@ -1377,7 +1378,7 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
-    private fun detectMiracastContent(bitmap: Bitmap) {
+    private fun detectMirrorContent(bitmap: Bitmap) {
         fun darkColumn(x: Int): Boolean {
             var lit = 0
             for (y in 0 until bitmap.height) {
@@ -1405,10 +1406,10 @@ class PlayerActivity : AppCompatActivity() {
         cropConfirmations = if (old != null && kotlin.math.abs(old.left - candidate.left) < 0.02f &&
             kotlin.math.abs(old.right - candidate.right) < 0.02f) cropConfirmations + 1 else 1
         cropCandidate = candidate
-        if (cropConfirmations >= 3 && (kotlin.math.abs(miracastContent.left - candidate.left) > 0.02f ||
-                kotlin.math.abs(miracastContent.right - candidate.right) > 0.02f)) {
-            miracastContent = candidate
-            Timber.i("Miracast content detected: $candidate")
+        if (cropConfirmations >= 3 && (kotlin.math.abs(mirrorContent.left - candidate.left) > 0.02f ||
+                kotlin.math.abs(mirrorContent.right - candidate.right) > 0.02f)) {
+            mirrorContent = candidate
+            android.util.Log.i("MirrorContent", "${if (isAirPlayMirrorSession) "AirPlay" else "Miracast"} content detected: $candidate")
             applyRotation()
         }
     }

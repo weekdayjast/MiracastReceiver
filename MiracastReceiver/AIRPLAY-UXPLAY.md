@@ -19,7 +19,14 @@
 gradlew.bat :app:assembleDebug :app:testDebugUnitTest :app:lintDebug -PbuildArm32 -PuseUxPlay --offline
 ```
 
-安装包版本为 `1.2.14`，versionCode 为 22；包名仍为 `top.jast.miracastreceiver`，可覆盖安装并保留设置。此 UxPlay 原生构建支持 ARM32、ARM64 / Android 6 以上。未传 `-PuseUxPlay` 时仍使用原 Kotlin 接收路径。
+安装包版本为 `1.2.15`，versionCode 为 23；包名仍为 `top.jast.miracastreceiver`，可覆盖安装并保留设置。此 UxPlay 原生构建支持 ARM32、ARM64 / Android 6 以上。未传 `-PuseUxPlay` 时仍使用原 Kotlin 接收路径。
+
+## v1.2.15 设备回归
+
+- 小米相册 DLNA：忽略 SOAPAction 请求头大小写，并为 ConnectionManager、RenderingControl 返回正确的 SOAP 命名空间。发送端相册照片已在 MIX 2S 接收端确认显示。
+- iOS 相册竖屏视频：AirPlay 复用镜像黑边检测，旋转时按有效画面缩放，避免连同编码黑边一起缩小。
+- 旋转后的清晰度：将首次及后续分辨率更新传递给 UxPlay 原生后端，取消固定的 1920×1080 声明。MIX 2S 重连后实际收到 1080×2160 H.264 码流，用户确认清晰度提升。
+- 更新声明不会实时改变当前 iPhone 码流；需停止投屏后重新连接。原生库沿用 v1.2.14 的构建。
 
 ## 建议回归顺序
 

@@ -26,7 +26,9 @@ internal class UxPlayReceiver(
     private val onStopped: () -> Unit,
     private val onAdvertising: (String) -> Unit,
     private val onError: () -> Unit,
+    initialResolution: Pair<Int, Int> = 1920 to 1080,
 ) : RaopCallbackHandler {
+    @Volatile private var displayResolution = initialResolution
     private val main = Handler(Looper.getMainLooper())
     private val nativeWorker = Executors.newSingleThreadExecutor()
     private val nsd = context.getSystemService(Context.NSD_SERVICE) as NsdManager
@@ -99,7 +101,8 @@ internal class UxPlayReceiver(
                 NativeBridge.nativeSetFeature(created, NativeBridge.FT_AUDIO, true)
                 NativeBridge.nativeSetH265Enabled(created, false)
                 NativeBridge.nativeSetCodecs(created, true, true)
-                NativeBridge.nativeSetDisplaySize(created, 1920, 1080, 30)
+                val (width, height) = displayResolution
+                NativeBridge.nativeSetDisplaySize(created, width, height, 30)
                 val port = NativeBridge.nativeStart(created, 7000)
                 check(port > 0) { "UxPlay failed to bind port 7000" }
                 val nativeHandle = created
@@ -109,6 +112,7 @@ internal class UxPlayReceiver(
                 main.post {
                     if (stopped) destroyNative(nativeHandle) else {
                         handle = nativeHandle
+                        applyDisplayResolution()
                         NativeBridge.nativeServerAudioConfigure(handle, 0, 95, 0, false, false, true, true, false)
                         listeningPort = port
                         airplayTxtRecords = airplayTxt
@@ -172,6 +176,20 @@ internal class UxPlayReceiver(
 
     fun attachSurface() {
         if (Looper.myLooper() == main.looper) updateOutputSurface() else main.post { updateOutputSurface() }
+    }
+
+    fun updateDisplayResolution(width: Int, height: Int) = main.post {
+        if (stopped) return@post
+        require(width > 0 && height > 0)
+        displayResolution = width to height
+        applyDisplayResolution()
+    }
+
+    private fun applyDisplayResolution() {
+        if (handle == 0L) return
+        val (width, height) = displayResolution
+        NativeBridge.nativeSetDisplaySize(handle, width, height, 30)
+        android.util.Log.i("AirPlayDisplay", "Advertised mirror resolution: ${width}x$height; applies on sender reconnect")
     }
 
     private fun updateOutputSurface() {
