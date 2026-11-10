@@ -110,7 +110,10 @@ class UpnpHttpServer(
                     Timber.d("UPnP $method $path")
 
                     when {
-                        path == "/device.xml" -> sendDeviceDescription(output)
+                        path == "/device.xml" -> {
+                            android.util.Log.i("DlnaDiscovery", "Device description requested from ${client.inetAddress.hostAddress}")
+                            sendDeviceDescription(output)
+                        }
                         path == "/service/ConnectionManager.xml" -> sendConnectionManagerScpd(output)
                         path == "/service/AVTransport.xml" -> sendAvTransportScpd(output)
                         path == "/service/RenderingControl.xml" -> sendRenderingControlScpd(output)
@@ -318,9 +321,10 @@ class UpnpHttpServer(
 
         val response = when (action) {
             "GetProtocolInfo" -> {
+                android.util.Log.i("DlnaDiscovery", "GetProtocolInfo: concrete JPEG/PNG/MP4 capabilities")
                 val content = """
                     <Source></Source>
-                    <Sink>http-get:*:video/*:*,http-get:*:audio/*:*,http-get:*:image/*:*</Sink>
+                    <Sink>${DlnaProtocolInfo.sink}</Sink>
                 """.trimIndent()
                 buildSoapResponse(action, content, "ConnectionManager")
             }

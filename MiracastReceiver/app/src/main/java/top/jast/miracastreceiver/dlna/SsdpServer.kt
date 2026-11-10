@@ -11,7 +11,6 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.MulticastSocket
-import java.net.NetworkInterface
 
 /**
  * SSDP (Simple Service Discovery Protocol) 服务器
@@ -95,22 +94,21 @@ class SsdpServer(
         // 检查搜索目标
         val searchTarget = extractSearchTarget(message)
 
-        val shouldRespond = when {
-            searchTarget == null -> false
-            searchTarget == "ssdp:all" -> true
-            searchTarget == "upnp:rootdevice" -> true
-            searchTarget.contains("MediaRenderer") -> true
-            searchTarget.contains("AVTransport") -> true
-            searchTarget.contains("RenderingControl") -> true
-            searchTarget.contains("ConnectionManager") -> true
-            searchTarget == "uuid:$deviceUuid" -> true
-            else -> false
+        val targets = when (searchTarget) {
+            "ssdp:all" -> advertisedTargets()
+            in advertisedTargets() -> listOfNotNull(searchTarget)
+            else -> emptyList()
         }
-
-        if (shouldRespond) {
-            sendSearchResponse(address, port, searchTarget ?: "upnp:rootdevice")
+        android.util.Log.i("DlnaDiscovery", "M-SEARCH from ${address.hostAddress}:$port ST=$searchTarget replies=${targets.size}")
+        for (target in targets) {
+            sendSearchResponse(address, port, target)
         }
     }
+
+    private fun advertisedTargets() = listOf(
+        "upnp:rootdevice", "uuid:$deviceUuid", DEVICE_TYPE,
+        SERVICE_TYPE_AV, SERVICE_TYPE_RC, SERVICE_TYPE_CM
+    )
 
     private fun extractSearchTarget(message: String): String? {
         val lines = message.split("\r\n")
@@ -145,11 +143,11 @@ class SsdpServer(
         }
 
         try {
-            val socket = DatagramSocket()
-            val data = response.toByteArray()
-            val packet = DatagramPacket(data, data.size, address, port)
-            socket.send(packet)
-            socket.close()
+            DatagramSocket().use { socket ->
+                val data = response.toByteArray()
+                val packet = DatagramPacket(data, data.size, address, port)
+                socket.send(packet)
+            }
             Timber.d("Sent SSDP response to ${address.hostAddress}:$port")
         } catch (e: Exception) {
             Timber.e(e, "Error sending SSDP response")
@@ -186,14 +184,7 @@ class SsdpServer(
     private fun sendNotify() {
         val location = "http://$localIp:$httpPort/device.xml"
 
-        val notifications = listOf(
-            "upnp:rootdevice",
-            "uuid:$deviceUuid",
-            DEVICE_TYPE,
-            SERVICE_TYPE_AV,
-            SERVICE_TYPE_RC,
-            SERVICE_TYPE_CM
-        )
+        val notifications = advertisedTargets()
 
         try {
             val socket = DatagramSocket()
@@ -230,14 +221,7 @@ class SsdpServer(
     }
 
     private fun sendByebye() {
-        val notifications = listOf(
-            "upnp:rootdevice",
-            "uuid:$deviceUuid",
-            DEVICE_TYPE,
-            SERVICE_TYPE_AV,
-            SERVICE_TYPE_RC,
-            SERVICE_TYPE_CM
-        )
+        val notifications = advertisedTargets()
 
         try {
             val socket = DatagramSocket()

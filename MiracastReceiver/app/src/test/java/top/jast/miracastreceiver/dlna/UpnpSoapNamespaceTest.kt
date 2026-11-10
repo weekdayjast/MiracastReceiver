@@ -37,6 +37,15 @@ class UpnpSoapNamespaceTest {
         }
     }
 
+    @Test fun protocolInfoListsConcreteGalleryFormatsAndKeepsWildcardFallbacks() {
+        val doc = response("handleConnectionManager", "ConnectionManager", "GetProtocolInfo")
+        val formats = doc.getElementsByTagName("Sink").item(0).textContent.split(',')
+        for (mime in listOf("image/jpeg", "image/png", "video/mp4", "audio/mpeg", "image/*", "video/*", "audio/*")) {
+            assertTrue(mime, formats.contains("http-get:*:$mime:*"))
+        }
+        assertEquals("", doc.getElementsByTagName("Source").item(0).textContent)
+    }
+
     @Test fun volumeUsesRenderingControlNamespace() {
         val doc = response("handleRenderingControl", "RenderingControl", "GetVolume")
         assertEquals(1, doc.getElementsByTagNameNS("urn:schemas-upnp-org:service:RenderingControl:1", "GetVolumeResponse").length)
