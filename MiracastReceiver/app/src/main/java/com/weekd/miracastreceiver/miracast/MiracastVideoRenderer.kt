@@ -18,18 +18,28 @@ import timber.log.Timber
  */
 class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
 
+    private data class AccessUnit(val data: ByteArray, val ptsUs: Long)
+
+    private companion object {
+        const val MAX_PENDING_UNITS = 120
+        const val MAX_PENDING_BYTES = 8 * 1024 * 1024
+    }
+
     private var decoder: VideoDecoder? = null
     private var configuredSurface: Surface? = null
     private var sps: ByteArray? = null
     private var pps: ByteArray? = null
     private var awaitingKeyframe = true
     private var droppedBeforeConfig = 0
+    private val pendingUnits = ArrayDeque<AccessUnit>()
+    private var pendingBytes = 0
 
     /**
      * 数据有丢失时调用：残缺的帧会让解码器输出花屏，而且错误会沿着帧间预测一直传播下去，
      * 所以必须丢弃后续帧直到下一个 IDR 才重新开始解码。
      */
     fun onDiscontinuity() {
+        clearPendingUnits()
         if (!awaitingKeyframe) {
             awaitingKeyframe = true
             Timber.w("Miracast: data loss detected, waiting for next keyframe")
@@ -43,6 +53,7 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
         val surface = surfaceProvider()
         if (surface == null || !surface.isValid) {
             releaseDecoder()
+            bufferUntilSurfaceReady(unit, ptsUs)
             return
         }
 
@@ -64,6 +75,17 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
             }
         }
 
+        // Surface 就绪后，从暂存的 IDR 开始，按原顺序送入依赖它的帧。
+        if (pendingUnits.isNotEmpty()) {
+            if (!containsIdr(unit)) {
+                for (pending in pendingUnits) decodeAccessUnit(pending.data, pending.ptsUs)
+            }
+            clearPendingUnits()
+        }
+        decodeAccessUnit(unit, ptsUs)
+    }
+
+    private fun decodeAccessUnit(unit: ByteArray, ptsUs: Long) {
         // 新解码器必须从 IDR 开始，否则解出来是花的
         if (awaitingKeyframe) {
             if (!containsIdr(unit)) return
@@ -72,6 +94,26 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
         }
 
         decoder?.decodeNalUnit(unit, ptsUs)
+    }
+
+    private fun bufferUntilSurfaceReady(unit: ByteArray, ptsUs: Long) {
+        // 投屏端可能在播放页创建之前就发出首个 IDR，之后很久才再次发送。
+        if (containsIdr(unit)) {
+            clearPendingUnits()
+        } else if (pendingUnits.isEmpty()) {
+            return
+        }
+        if (pendingUnits.size >= MAX_PENDING_UNITS || unit.size > MAX_PENDING_BYTES - pendingBytes) {
+            clearPendingUnits()
+            return
+        }
+        pendingUnits.addLast(AccessUnit(unit, ptsUs))
+        pendingBytes += unit.size
+    }
+
+    private fun clearPendingUnits() {
+        pendingUnits.clear()
+        pendingBytes = 0
     }
 
     private fun rebuildDecoder(surface: Surface): Boolean {
@@ -143,6 +185,7 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
 
     fun release() {
         releaseDecoder()
+        clearPendingUnits()
         sps = null
         pps = null
         awaitingKeyframe = true

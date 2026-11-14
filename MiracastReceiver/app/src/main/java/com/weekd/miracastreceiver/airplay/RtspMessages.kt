@@ -42,7 +42,8 @@ data class RtspResponse(
     val body: String = "",
     val bodyBytes: ByteArray? = null,
     val contentType: String? = null,
-    val protocol: String = "RTSP/1.0"
+    val protocol: String = "RTSP/1.0",
+    val disconnect: Boolean = false,
 )
 
 /** Effective wire body: prefers binary [RtspResponse.bodyBytes], else UTF-8 of [RtspResponse.body]. */

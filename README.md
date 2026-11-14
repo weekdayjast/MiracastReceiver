@@ -185,6 +185,8 @@ cd MiracastReceiver
 
 ### 🙏 致谢与参考
 
+- 感谢 [UxPlay](https://github.com/FDH2/UxPlay) 提供 AirPlay 协议实现，以及 [android-airplay-server](https://github.com/jqssun/android-airplay-server) 提供 Android 接入与渲染参考；相关代码保留各自的许可证与来源声明。
+
 - AirPlay 屏幕镜像实现借鉴并参考了 [PhairPlay](https://github.com/mazer666/PhairPlay) 项目的协议流程与实现思路。
 - Google Cast 媒体接收参考了 [openchromecast](https://github.com/yukarikaname/openchromecast) 的协议定义与实现流程，保留其 MIT 许可声明。
 
@@ -382,6 +384,8 @@ Output APKs: `app/build/outputs/apk/`
 
 ### 🙏 Acknowledgements & References
 
+- Thanks to [UxPlay](https://github.com/FDH2/UxPlay) for its AirPlay protocol implementation and [android-airplay-server](https://github.com/jqssun/android-airplay-server) for the Android integration and rendering reference. Their license and source notices are retained.
+
 - AirPlay screen mirroring is inspired by and references the protocol flow and implementation ideas from [PhairPlay](https://github.com/mazer666/PhairPlay).
 - Google Cast media reception references [openchromecast](https://github.com/yukarikaname/openchromecast), with its MIT copyright and license retained.
 
@@ -453,9 +457,11 @@ If you find this project helpful, please give it a star!
 
 Thanks to the following contributors for their code, improvements, and device testing, and to everyone who reports issues, shares logs, and helps test the app.
 
-| 贡献者 / Contributor | 贡献 / Contributions |
-| --- | --- |
-| [@arjuntam](https://github.com/arjuntam) | 横屏双栏布局、投屏退出行为设置及设备验证（[#28](https://github.com/weekdayjast/MiracastReceiver/pull/28)、[#29](https://github.com/weekdayjast/MiracastReceiver/pull/29)） / Landscape layout, configurable exit behavior, and device testing |
-| [@Googler0825](https://github.com/Googler0825) | 4K AirPlay HEVC 协商、解码与设备验证（[#26](https://github.com/weekdayjast/MiracastReceiver/pull/26)） / 4K AirPlay HEVC negotiation, decoding, and device testing |
+| 贡献者 / Contributor |
+| --- |
+| [@arjuntam](https://github.com/arjuntam) |
+| [@Googler0825](https://github.com/Googler0825) |
+| [@aby1987](https://github.com/aby1987) |
+| [@dcstf](https://github.com/dcstf) |
 
 [查看完整贡献者名单 / View all contributors](https://github.com/weekdayjast/MiracastReceiver/graphs/contributors)

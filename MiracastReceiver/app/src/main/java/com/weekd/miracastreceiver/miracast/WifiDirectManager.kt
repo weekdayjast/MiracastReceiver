@@ -10,8 +10,9 @@ import android.net.wifi.p2p.WifiP2pDevice
 import android.net.wifi.p2p.WifiP2pGroup
 import android.net.wifi.p2p.WifiP2pManager
 import android.net.wifi.p2p.nsd.WifiP2pDnsSdServiceInfo
-import androidx.core.content.ContextCompat
+import android.os.Handler
 import android.os.Looper
+import androidx.core.content.ContextCompat
 import timber.log.Timber
 
 /**
@@ -39,6 +40,8 @@ class WifiDirectManager(
     private var channel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private var isStarted = false
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val refreshDiscovery = Runnable { refreshPeerDiscovery() }
     enum class StartupState { STARTING, UNSUPPORTED, PERMISSION_REQUIRED, WIFI_DISABLED, FAILED }
     var onStartupState: ((StartupState) -> Unit)? = null
     var onWfdConfigured: (() -> Unit)? = null
@@ -177,6 +180,7 @@ class WifiDirectManager(
                         if (group != null) {
                             Timber.i("Group created - SSID: ${group.networkName}, Owner: ${group.isGroupOwner}")
                             onGroupCreated?.invoke(group)
+                            schedulePeerDiscovery()
 
                             // 设置设备名称
                             setDeviceName(deviceName)
@@ -202,6 +206,7 @@ class WifiDirectManager(
                             if (group != null) {
                                 Timber.i("Existing group found: ${group.networkName}")
                                 onGroupCreated?.invoke(group)
+                                schedulePeerDiscovery()
                                 setDeviceName(deviceName)
                             } else {
                                 onStartupState?.invoke(StartupState.FAILED)
@@ -284,22 +289,45 @@ class WifiDirectManager(
                 }
             })
 
-            // Miracast 依赖 P2P 设备发现与 WFD IE；discoverServices 没有
-            // addServiceRequest 时会以 NO_SERVICE_REQUESTS 失败，无法启动发现。
-            manager?.discoverPeers(ch, object : WifiP2pManager.ActionListener {
-                override fun onSuccess() {
-                    Timber.i("Miracast peer discovery started")
-                }
-
-                override fun onFailure(reason: Int) {
-                    Timber.e("Failed to start Miracast peer discovery: $reason")
-                }
-            })
         } catch (e: SecurityException) {
             // 用户拒绝定位权限时走这里 —— Miracast 用不了，但不该影响 AirPlay / DLNA
             Timber.w("注册 P2P 本地服务被拒绝（缺少定位权限），Miracast 不可用")
         } catch (e: Exception) {
             Timber.e(e, "Error registering local service")
+        }
+    }
+
+    private fun schedulePeerDiscovery() {
+        mainHandler.removeCallbacks(refreshDiscovery)
+        mainHandler.post(refreshDiscovery)
+    }
+
+    private fun refreshPeerDiscovery() {
+        val ch = channel ?: return
+        if (!isStarted) return
+
+        // Android 会在超时或移除 P2P 组时结束发现。空闲时刷新，避免干扰已连接的发送端。
+        mainHandler.postDelayed(refreshDiscovery, 90_000L)
+        try {
+            manager?.requestGroupInfo(ch) { group ->
+                if (!isStarted || channel !== ch || group == null || !group.isGroupOwner ||
+                    group.clientList.isNotEmpty()) return@requestGroupInfo
+                try {
+                    manager?.discoverPeers(ch, object : WifiP2pManager.ActionListener {
+                        override fun onSuccess() {
+                            Timber.i("Miracast peer discovery started")
+                        }
+
+                        override fun onFailure(reason: Int) {
+                            Timber.w("Failed to start Miracast peer discovery: $reason")
+                        }
+                    })
+                } catch (e: SecurityException) {
+                    Timber.w(e, "Wi-Fi Direct discovery permission required")
+                }
+            }
+        } catch (e: SecurityException) {
+            Timber.w(e, "Wi-Fi Direct group info permission required")
         }
     }
 
@@ -374,6 +402,7 @@ class WifiDirectManager(
 
     fun stop() {
         if (!isStarted) return
+        mainHandler.removeCallbacks(refreshDiscovery)
 
         try {
             // 移除本地服务

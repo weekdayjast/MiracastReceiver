@@ -10,6 +10,8 @@ val targetAbis = when {
     else -> listOf("arm64-v8a", "armeabi-v7a")
 }
 val buildUniversalApk = targetAbis.size > 1
+val useUxPlayTest = providers.gradleProperty("useUxPlayTest").isPresent
+if (useUxPlayTest) require(targetAbis == listOf("armeabi-v7a")) { "UxPlay test libraries require -PbuildArm32" }
 
 android {
     namespace = "com.weekd.miracastreceiver"
@@ -21,6 +23,8 @@ android {
         targetSdk = 36
         versionCode = 18
         versionName = "1.2.13"
+        buildConfigField("boolean", "USE_UXPLAY_TEST", useUxPlayTest.toString())
+        if (useUxPlayTest) minSdk = 23
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -84,6 +88,7 @@ android {
         viewBinding = true
         buildConfig = true
     }
+    if (useUxPlayTest) sourceSets["main"].jniLibs.srcDir("src/uxplayTest/jniLibs")
 }
 
 dependencies {

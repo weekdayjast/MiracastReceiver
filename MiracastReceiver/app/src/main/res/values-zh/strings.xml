@@ -39,6 +39,7 @@
     <string name="status_finished">播放完成</string>
     <string name="status_playback_error">播放错误</string>
     <string name="error_playback_detail">播放错误: %s</string>
+    <string name="error_dlna_avc_decode">电视无法解码此视频，请在发送端切换画质后重新投屏。</string>
     <string name="error_unknown">未知错误</string>
     <string name="status_speed">播放速度：%s</string>
     <string name="status_quality">画质：%s</string>

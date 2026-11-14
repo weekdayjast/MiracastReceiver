@@ -53,6 +53,7 @@
     <string name="status_finished">Playback finished</string>
     <string name="status_playback_error">Playback error</string>
     <string name="error_playback_detail">Playback error: %s</string>
+    <string name="error_dlna_avc_decode">This TV could not decode the video. Try changing the video quality on the sending device and cast again.</string>
     <string name="error_unknown">Unknown error</string>
     <string name="status_speed">Playback speed: %s</string>
     <string name="status_quality">Quality: %s</string>

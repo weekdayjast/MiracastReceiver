@@ -38,14 +38,18 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.Format
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.ExoPlaybackException
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -79,6 +83,8 @@ class PlayerActivity : AppCompatActivity() {
 
         // Miracast 额外参数
         const val EXTRA_SOURCE_TYPE = "SOURCE_TYPE"
+        const val EXTRA_DLNA_SESSION_ID = "DLNA_SESSION_ID"
+        const val EXTRA_RELEASE_DLNA_MEDIA = "RELEASE_DLNA_MEDIA"
         const val EXTRA_RTP_PORT = "RTP_PORT"
         const val EXTRA_SESSION_ID = "SESSION_ID"
 
@@ -141,6 +147,7 @@ class PlayerActivity : AppCompatActivity() {
     private var castIdleReason: String? = null
     private var castStoppedBySender = false
     private var trackSelector: DefaultTrackSelector? = null
+    private var usingSoftwareAvc = false
     private var mediaUri: String? = null
     private var mediaTitle: String? = null
     private var playlist: List<String> = emptyList()
@@ -314,14 +321,20 @@ class PlayerActivity : AppCompatActivity() {
      *   （起播要缓冲 2.5 秒、重缓冲后要 5 秒），而实时流的数据严格按实时速率到达，
      *   永远攒不出那么多缓冲，会陷入「解几帧 → 缓冲耗尽 → 转圈」的循环。
      */
-    private fun initPlayer(lowLatency: Boolean = false) {
+    private fun initPlayer(lowLatency: Boolean = false, softwareAvc: Boolean = false) {
+        val trackParameters = trackSelector?.parameters
+        val playbackParameters = player?.playbackParameters
+        val volume = player?.volume
+        playerView.player = null
         player?.release()
+        usingSoftwareAvc = softwareAvc
 
         // 默认不限制分辨率（对应画质菜单的「自动」）。原先默认 setMaxVideoSizeSd() 会把所有
         // 播放压到标清，Miracast 的 1080p 视频轨会被直接排除，导致选不出轨道、
         // loader 停止加载，最终报 "stuck buffering and not loading"。
         trackSelector = DefaultTrackSelector(this).apply {
             setParameters(buildUponParameters().clearVideoSizeConstraints())
+            trackParameters?.let { setParameters(it) }
         }
 
         val loadControl = DefaultLoadControl.Builder()
@@ -341,11 +354,21 @@ class PlayerActivity : AppCompatActivity() {
             }
             .build()
 
-        player = ExoPlayer.Builder(this)
+        val renderersFactory = DefaultRenderersFactory(this)
+        if (softwareAvc) {
+            renderersFactory.setEnableDecoderFallback(true)
+            renderersFactory.setMediaCodecSelector { mimeType, secure, tunneling ->
+                val codecs = MediaCodecSelector.DEFAULT.getDecoderInfos(mimeType, secure, tunneling)
+                if (mimeType == MimeTypes.VIDEO_H264) codecs.filter { it.softwareOnly } else codecs
+            }
+        }
+        player = ExoPlayer.Builder(this, renderersFactory)
             .setTrackSelector(trackSelector!!)
             .setLoadControl(loadControl)
             .build()
             .apply {
+                playbackParameters?.let { this.playbackParameters = it }
+                volume?.let { this.volume = it }
                 addListener(object : Player.Listener {
                     override fun onEvents(player: Player, events: Player.Events) {
                         updateScreenOn()
@@ -405,9 +428,16 @@ class PlayerActivity : AppCompatActivity() {
                     }
 
                     override fun onPlayerError(error: PlaybackException) {
+                        Timber.e(error, "Player error")
+                        if (isDlnaAvcDecoderError(error)) {
+                            if (retryWithSoftwareAvc(this@apply, error)) return
+                            updateBufferingState(false)
+                            showPlaybackError(getString(R.string.error_dlna_avc_decode))
+                            tvError.visibility = View.VISIBLE
+                            return
+                        }
                         castIdleReason = "ERROR"
                         reportCastState("IDLE")
-                        Timber.e(error, "Player error")
                         updateBufferingState(false)
                         showPlaybackError(error.message)
                         tvError.visibility = View.VISIBLE
@@ -813,6 +843,10 @@ class PlayerActivity : AppCompatActivity() {
         applyRotation()
 
         try {
+            if (usingSoftwareAvc) {
+                initPlayer()
+                applyRotation()
+            }
             tvError.visibility = View.GONE
             updateBufferingState(true)
 
@@ -847,6 +881,55 @@ class PlayerActivity : AppCompatActivity() {
             showPlaybackError(e.message)
             tvError.visibility = View.VISIBLE
             updateBufferingState(false)
+        }
+    }
+
+    private fun isDlnaAvcDecoderError(error: PlaybackException): Boolean {
+        if (intent.getStringExtra(EXTRA_SOURCE_TYPE) != "DLNA" || error !is ExoPlaybackException) {
+            return false
+        }
+        return error.type == ExoPlaybackException.TYPE_RENDERER &&
+            error.rendererFormat?.sampleMimeType == MimeTypes.VIDEO_H264 &&
+            (error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||
+                error.errorCode == PlaybackException.ERROR_CODE_DECODING_FAILED)
+    }
+
+    private fun retryWithSoftwareAvc(failedPlayer: ExoPlayer, error: PlaybackException): Boolean {
+        if (usingSoftwareAvc || !screenOnSessionActive || failedPlayer.mediaItemCount == 0) return false
+        val decoderAvailable = runCatching {
+            MediaCodecSelector.DEFAULT.getDecoderInfos(MimeTypes.VIDEO_H264, false, false)
+                .any { it.softwareOnly }
+        }.onFailure { Timber.w(it, "Could not query AVC software decoders") }.getOrDefault(false)
+        if (!decoderAvailable) return false
+
+        val failedIntent = intent
+        // Release and rebuild outside the old player's listener callback.
+        return playerView.post {
+            if (player !== failedPlayer || intent !== failedIntent || failedPlayer.playerError !== error ||
+                !screenOnSessionActive || isFinishing || isDestroyed
+            ) return@post
+
+            val items = List(failedPlayer.mediaItemCount) { failedPlayer.getMediaItemAt(it) }
+            val index = failedPlayer.currentMediaItemIndex
+            val position = if (failedPlayer.isCurrentMediaItemSeekable && !failedPlayer.isCurrentMediaItemLive) {
+                failedPlayer.currentPosition
+            } else C.TIME_UNSET
+            val playWhenReady = failedPlayer.playWhenReady
+            Timber.i("Retrying DLNA AVC playback with a system software decoder")
+            try {
+                initPlayer(softwareAvc = true)
+                player?.apply {
+                    setMediaItems(items, index, position)
+                    this.playWhenReady = playWhenReady
+                    prepare()
+                }
+                applyRotation()
+            } catch (e: Exception) {
+                Timber.e(e, "Could not restart DLNA playback with software AVC")
+                updateBufferingState(false)
+                showPlaybackError(getString(R.string.error_dlna_avc_decode))
+                tvError.visibility = View.VISIBLE
+            }
         }
     }
 
@@ -1462,7 +1545,7 @@ class PlayerActivity : AppCompatActivity() {
         else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
     }
 
-    private fun stopPlayback(endCastSession: Boolean = false) {
+    private fun stopPlayback(endCastSession: Boolean = false, releaseDlnaMedia: Boolean = false) {
         screenOnSessionActive = false
         stopImageSlideShow()
         stopProgressUpdates()
@@ -1470,7 +1553,7 @@ class PlayerActivity : AppCompatActivity() {
         mirrorAspectJob = null
         updateScreenOn()
         player?.stop()
-        reportPlaybackStopped(endCastSession)
+        reportPlaybackStopped(endCastSession, releaseDlnaMedia)
     }
 
     private fun startProgressUpdates() {
@@ -1490,6 +1573,8 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun reportPlaybackPosition() {
         if (castToken != null) { reportCastState(); return }
+        val sessionId = intent.getLongExtra(EXTRA_DLNA_SESSION_ID, -1L)
+        if (sessionId == -1L) return
         val currentPlayer = player ?: return
         val position = currentPlayer.currentPosition
         val duration = currentPlayer.duration.takeIf { it > 0 } ?: 0L
@@ -1499,6 +1584,7 @@ class PlayerActivity : AppCompatActivity() {
             putExtra("position", position)
             putExtra("duration", duration)
             putExtra("is_playing", currentPlayer.isPlaying)
+            putExtra(EXTRA_DLNA_SESSION_ID, sessionId)
             setPackage(packageName)
         }
         sendBroadcast(intent)
@@ -1508,12 +1594,16 @@ class PlayerActivity : AppCompatActivity() {
      * TV 端本地退出/播放结束时通知 DLNA 渲染器状态归零，
      * 否则 Emby 会一直认为该设备处于播放中，无法取消投屏或切换到新文件。
      */
-    private fun reportPlaybackStopped(endCastSession: Boolean = false) {
+    private fun reportPlaybackStopped(endCastSession: Boolean = false, releaseDlnaMedia: Boolean = false) {
         if (castToken != null) {
             reportCastState("IDLE", castIdleReason ?: "CANCELLED", endSession = endCastSession)
             return
         }
+        val sessionId = intent.getLongExtra(EXTRA_DLNA_SESSION_ID, -1L)
+        if (sessionId == -1L) return
         val intent = Intent(ACTION_PLAYBACK_STOPPED).apply {
+            putExtra(EXTRA_DLNA_SESSION_ID, sessionId)
+            putExtra(EXTRA_RELEASE_DLNA_MEDIA, releaseDlnaMedia)
             setPackage(packageName)
         }
         sendBroadcast(intent)
@@ -1603,7 +1693,7 @@ class PlayerActivity : AppCompatActivity() {
                 putExtra("miracast", isMiracastSession)
             })
         }
-        stopPlayback(endCastSession = true)
+        stopPlayback(endCastSession = true, releaseDlnaMedia = true)
         exitPlayer()
     }
 }

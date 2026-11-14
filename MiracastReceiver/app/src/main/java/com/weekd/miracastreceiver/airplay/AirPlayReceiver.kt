@@ -1,6 +1,7 @@
 ﻿package com.weekd.miracastreceiver.airplay
 
 import android.content.Context
+import com.weekd.miracastreceiver.BuildConfig
 import android.view.Surface
 import com.weekd.miracastreceiver.airplay.handshake.AirPlayNtpClient
 import com.weekd.miracastreceiver.airplay.handshake.AudioStreamServer
@@ -121,6 +122,7 @@ class AirPlayReceiver(
     @Volatile private var audioServer: AudioStreamServer? = null
     @Volatile private var bufferedAudioServer: BufferedAudioServer? = null
     @Volatile private var urlVideoPlayer: AirPlayVideoPlayer? = null
+    private var uxPlayTestReceiver: UxPlayTestReceiver? = null
 
     // Reverse remote control (TV → sender). Created lazily once a sender advertises DACP-ID.
     private val dacpClient = DacpClient(context)
@@ -153,6 +155,17 @@ class AirPlayReceiver(
      */
     fun start() {
         Logger.i("AirPlayReceiver starting (displayName='$displayName')")
+        if (BuildConfig.USE_UXPLAY_TEST) {
+            if (uxPlayTestReceiver != null) return
+            uxPlayTestReceiver = UxPlayTestReceiver(
+                context, displayName.ifBlank { "客厅电视" } + " UxPlay", videoSurfaceProvider,
+                onConnected = { onSenderNameChanged("AirPlay UxPlay"); emitState(AirPlayState.CONNECTED) },
+                onStopped = { lifecycle.sessionEnded() },
+                onAdvertising = { name -> onActualNameRegistered(name); emitState(AirPlayState.ADVERTISING) },
+                onError = { emitState(AirPlayState.ERROR) },
+            ).also { it.start() }
+            return
+        }
         scope.launch {
             try {
                 startTimingHandler()
@@ -176,6 +189,8 @@ class AirPlayReceiver(
     fun stop() {
         Logger.i("AirPlayReceiver stopping")
         try {
+            uxPlayTestReceiver?.stop()
+            uxPlayTestReceiver = null
             rtspHandler?.stop()
             timingHandler?.stop()
             mdnsService?.stop()
@@ -195,6 +210,7 @@ class AirPlayReceiver(
      */
     /** 播放页的 Surface 重建时，通知 URL 播放器和镜像解码线程恢复输出。 */
     fun onVideoSurfaceChanged() {
+        uxPlayTestReceiver?.let { it.attachSurface(); return }
         urlVideoPlayer?.attachSurface()
         mirrorServer?.onSurfaceChanged()
     }
@@ -202,6 +218,7 @@ class AirPlayReceiver(
     fun sendRemoteCommand(command: String) = dacpClient.sendCommand(command)
 
     fun disconnectSender() {
+        uxPlayTestReceiver?.let { it.disconnectSender(); return }
         scope.launch {
             rtspHandler?.disconnectSender()
         }
@@ -282,7 +299,7 @@ class AirPlayReceiver(
                 npArtwork = bytes.takeIf { it.isNotEmpty() }
                 emitNowPlaying()
             },
-            onVideoPlay = { url, start, startSec -> startUrlVideo(url, start, startSec) },
+            onVideoPlay = { url, start, startSec, youtubeMlhls -> startUrlVideo(url, start, startSec, youtubeMlhls) },
             onVideoRate = { rate -> urlVideoPlayer?.setRate(rate) },
             onVideoScrub = { pos -> urlVideoPlayer?.scrub(pos) },
             onVideoStop = { stopUrlVideo() },
@@ -548,7 +565,7 @@ class AirPlayReceiver(
      * AirPlay video URL mode (non-mirroring): show the streaming surface and hand the URL to
      * [AirPlayVideoPlayer], which fetches + plays it via MediaPlayer onto the same Surface.
      */
-    private fun startUrlVideo(url: String, startFraction: Double, startSeconds: Double? = null) {
+    private fun startUrlVideo(url: String, startFraction: Double, startSeconds: Double?, youtubeMlhls: Boolean) {
         val mirror = mirrorServer
         if (mirror != null) {
             // iOS hands a full-screen video off from a running mirror (e.g. Chrome/Safari native
@@ -560,26 +577,30 @@ class AirPlayReceiver(
         }
         emitState(AirPlayState.CONNECTED)   // shows StreamingScreen → Surface becomes available
         val player = urlVideoPlayer ?: AirPlayVideoPlayer(
+            context = context,
             surfaceProvider = videoSurfaceProvider,
             onEnded = {
-                // iPhone 在 /play 后设置 actionAtItemEnd=1（播完暂停在末尾），由它决定下一步。
-                // 像 Apple TV 一样停在最后一帧、上报 paused，/playback-info 继续返回 位置=时长、
-                // 速率=0；iPhone 自己发 /stop 再切下一段（广告 → 正片）。主动上报 stopped 会被当成
-                // "电视端停止了播放"：iPhone 删掉该条目后卡在"隔空播放"画面，不再投送正片。
-                Logger.i("AirPlay URL video reached the end — paused at end, waiting for the sender")
-                rtspHandler?.sendVideoEvent("paused")
+                if (rtspHandler?.markYouTubePlaybackStopped() == true) {
+                    Logger.i("AirPlay YouTube video reached the end — releasing player")
+                    stopUrlVideo()
+                } else {
+                    // Honor actionAtItemEnd=1 for other AirPlay URL senders.
+                    Logger.i("AirPlay URL video reached the end — paused at end, waiting for the sender")
+                    rtspHandler?.sendVideoEvent("paused")
+                }
             },
             onFailed = { reason ->
                 // Tell the sender playback stopped so it leaves its "playing on TV" black screen
                 // (and, during a mirror, goes back to mirroring) instead of waiting forever.
                 Logger.w("AirPlay URL video failed: $reason")
+                rtspHandler?.markYouTubePlaybackStopped()
                 rtspHandler?.sendVideoEvent("stopped")
                 stopUrlVideo()
             },
             onPlaying = { rtspHandler?.sendVideoEvent("playing") },
         ).also { urlVideoPlayer = it }
         rtspHandler?.sendVideoEvent("loading")
-        player.play(url, startFraction, startSeconds)
+        player.play(url, startFraction, startSeconds, youtubeMlhls)
         Logger.i("AirPlay URL video started: $url (start=$startFraction, fromMirror=${mirror != null})")
     }
 

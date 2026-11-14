@@ -123,16 +123,16 @@ class CastReceiverService : Service() {
                     val position = intent.getLongExtra("position", 0L)
                     val duration = intent.getLongExtra("duration", 0L)
                     val isPlaying = intent.getBooleanExtra("is_playing", false)
-                    dlnaRenderer.updatePosition(position, duration)
-                    if (isPlaying) dlnaRenderer.setPlaying() else dlnaRenderer.setPaused()
+                    val sessionId = intent.getLongExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_DLNA_SESSION_ID, -1L)
+                    dlnaRenderer.onPlayerPosition(sessionId, position, duration, isPlaying)
                     Timber.d("Player position updated: $position / $duration")
                 }
                 ACTION_PLAYBACK_STOPPED -> {
-                    // TV 端本地退出/播放结束，需要让 DLNA 状态归零，
-                    // 否则 Emby 会一直显示"正在播放"且无法取消/切换投屏。
-                    dlnaRenderer.updatePosition(0L, 0L)
-                    dlnaRenderer.setStopped()
-                    Timber.i("Playback stopped locally, DLNA renderer reset to STOPPED")
+                    val sessionId = intent.getLongExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_DLNA_SESSION_ID, -1L)
+                    val releaseMedia = intent.getBooleanExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_RELEASE_DLNA_MEDIA, false)
+                    if (dlnaRenderer.onPlayerStopped(sessionId, releaseMedia)) {
+                        upnpHttpServer.notifyAvTransportChanged()
+                    }
                 }
             }
         }
@@ -322,6 +322,8 @@ class CastReceiverService : Service() {
             val state = dlnaRenderer.getState()
             // 启动 PlayerActivity 并播放
             val intent = Intent(this, com.weekd.miracastreceiver.ui.PlayerActivity::class.java).apply {
+                putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_SOURCE_TYPE, "DLNA")
+                putExtra(com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_DLNA_SESSION_ID, dlnaRenderer.getMediaSessionId())
                 if (state.playlist.size > 1) {
                     putStringArrayListExtra(
                         com.weekd.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_URIS,
