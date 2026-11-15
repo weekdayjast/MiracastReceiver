@@ -41,6 +41,13 @@
             android:layout_height="match_parent" />
     </FrameLayout>
 
+    <!-- Subtitles decoded by the external AirPlay HLS player need their own overlay. -->
+    <androidx.media3.ui.SubtitleView
+        android:id="@+id/airplay_subtitles"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
     <!-- 图片轮播视图 -->
     <ImageView
         android:id="@+id/image_view"

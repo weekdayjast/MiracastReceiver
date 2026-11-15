@@ -95,4 +95,34 @@
     <string name="notification_channel_name">キャスト受信サービス</string>
     <string name="notification_channel_description">キャスト受信サービスを実行し続けます</string>
     <string name="notification_waiting">AirPlay / DLNA / Miracast の接続を待機中</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">ネットワークアドレスを待っています。接続を確認してください。</string>
+    <string name="status_receiver_running">受信サービスは動作中です。接続を待っています。</string>
+    <string name="status_receiver_stopped">受信サービスは停止しています。アプリを開き直してください。</string>
+    <string name="status_miracast_checking">Windows / Android の画面ミラーリングを確認中…</string>
+    <string name="status_miracast_advertising">Miracast の検出設定が完了しました。Windows は Win+K、Android はワイヤレスディスプレイを開いてください。検出にはドライバーの対応も必要です。</string>
+    <string name="status_miracast_system">システムのワイヤレスディスプレイは有効です。Win+K に表示されない場合は、システムの画面ミラーリング受信機能を開いて再試行してください。この設定だけでは受信対応を確認できません。</string>
+    <string name="status_miracast_root_required">root 権限が許可されていないため、Windows / Android の画面ミラーリングを利用できません。システムの受信機能がある場合は先に有効にしてください。それ以外は検出に root が必要です。AirPlay、DLNA、VLC Cast は利用できます。</string>
+    <string name="status_miracast_failed">Windows / Android の画面ミラーリングを設定できませんでした。システムの受信機能、Wi-Fi Direct、root 権限を確認し、アプリを開き直してください。解決しない場合は ADB ログを添付してください。他の投影方法は利用できます。</string>
+    <string name="status_miracast_unsupported">この端末には Windows / Android の画面ミラーリングに必要な Wi-Fi Direct がありません。AirPlay、DLNA、VLC Cast を使用してください。</string>
+    <string name="status_miracast_permission">Windows / Android の画面ミラーリングには付近のデバイスまたは位置情報の権限が必要です。設定で許可し、アプリを開き直してください。</string>
+    <string name="status_miracast_wifi_disabled">Windows / Android の画面ミラーリングには Wi-Fi Direct が必要です。Wi-Fi を有効にし、アプリを開き直してください。有線 LAN だけでは利用できません。</string>
+    <string name="castplus_enable">Huawei Cast+ 受信機能（試験的）</string>
+    <string name="castplus_off">Cast+ は無効です。有効にすると Huawei スマートフォンからワイヤレス投影を試せます。</string>
+    <string name="castplus_unsupported">Cast+ には Android 6 以降と ARM 端末が必要です。</string>
+    <string name="castplus_permission">Cast+ には位置情報と、Android 13 以降では付近のデバイスの権限が必要です。許可してアプリを開き直してください。</string>
+    <string name="castplus_starting">Cast+ 受信機能を起動中…</string>
+    <string name="castplus_ready">Cast+ の準備ができました。Huawei スマートフォンでワイヤレス投影を開いてください。</string>
+    <string name="castplus_pairing">Cast+ は接続の確認または PIN を待っています。</string>
+    <string name="castplus_connecting">Huawei スマートフォンに接続中…</string>
+    <string name="castplus_playing">Huawei Cast+ でスマートフォンの画面を表示しています。</string>
+    <string name="castplus_paused">Huawei Cast+ は一時停止中です。</string>
+    <string name="castplus_disconnecting">Huawei Cast+ を切断中…</string>
+    <string name="castplus_error">Cast+ の起動または接続に失敗しました。一度無効にしてから有効にしてください。解決しない場合は受信側の ADB ログを添付してください。</string>
+    <string name="castplus_request">%1$s が Huawei Cast+ で接続しようとしています。</string>
+    <string name="castplus_pin">スマートフォンにこの PIN を入力してください：%1$s</string>
+    <string name="castplus_exit">投影を停止</string>
+    <string name="receiver_default_name">リビングのテレビ</string>
+    <string name="subtitles_follow_sender">送信側の端末で字幕を選択してください。</string>
 </resources>

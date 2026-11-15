@@ -1,0 +1,2 @@
+# Patch context includes significant leading spaces on otherwise empty lines.
+MiracastReceiver/app/src/uxplay/native-patches/*.patch -text whitespace=-blank-at-eol,-blank-at-eof,-space-before-tab

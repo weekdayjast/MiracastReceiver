@@ -110,9 +110,9 @@ adb -s SERIAL shell getprop ro.product.model >> receiver-device.txt
 adb -s SERIAL shell getprop ro.build.version.release >> receiver-device.txt
 adb -s SERIAL shell getprop ro.build.version.sdk >> receiver-device.txt
 adb -s SERIAL shell getprop ro.product.cpu.abilist >> receiver-device.txt
-adb -s SERIAL shell dumpsys package com.weekd.miracastreceiver > receiver-package.txt
+adb -s SERIAL shell dumpsys package top.jast.miracastreceiver > receiver-package.txt
 adb -s SERIAL shell dumpsys activity activities > receiver-activities.txt
-adb -s SERIAL shell dumpsys activity services com.weekd.miracastreceiver > receiver-services.txt
+adb -s SERIAL shell dumpsys activity services top.jast.miracastreceiver > receiver-services.txt
 adb -s SERIAL shell dumpsys window > receiver-window.txt
 adb -s SERIAL shell dumpsys power > receiver-power.txt
 adb -s SERIAL shell dumpsys media.player > receiver-media-player.txt

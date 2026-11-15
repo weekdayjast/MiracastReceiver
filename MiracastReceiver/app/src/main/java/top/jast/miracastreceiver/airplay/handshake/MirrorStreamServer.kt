@@ -1,0 +1,421 @@
+﻿package top.jast.miracastreceiver.airplay.handshake
+
+import android.view.Surface
+import top.jast.miracastreceiver.airplay.StreamStats
+import top.jast.miracastreceiver.airplay.VideoDecoder
+import top.jast.miracastreceiver.util.Logger
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.InputStream
+import java.net.ServerSocket
+import java.net.Socket
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+
+/**
+ * MirrorStreamServer — receives and decodes AVC/HEVC AirPlay 2 mirroring video.
+ *
+ * macOS connects to [dataPort] and sends [128-byte header][payload] packets:
+ *  - payload_size = little-endian int at header offset 0
+ *  - payload_type = little-endian short at header offset 4, low byte
+ *      • type 1: unencrypted avcC or hvc1/hvcC (VPS/SPS/PPS) → (re)configure the decoder
+ *      • type 0: AES-CTR-encrypted length-prefixed AVC/HEVC → decrypt, convert to Annex-B, decode
+ *
+ * Architecture: a network thread reads + decrypts packets (keeping the AES-CTR keystream strictly
+ * ordered) and pushes work onto a bounded queue; a separate decoder thread consumes it. This way
+ * the socket is always drained fast — if the decoder can't keep up (this SoC is modest, and the
+ * audio codec competes for resources), frames are dropped from the queue instead of stalling the
+ * socket, which previously caused macOS to drop the whole session.
+ *
+ * Reference: RPiPlay lib/raop_rtp_mirror.c (raop_rtp_mirror_thread).
+ */
+class MirrorStreamServer(
+    aesKey: ByteArray,
+    ecdhSecret: ByteArray,
+    streamConnectionId: Long,
+    private val surfaceProvider: () -> Surface?,
+    private val width: Int = 1920,
+    private val height: Int = 1080,
+) {
+    private sealed class Item
+    private class Config(val sps: ByteArray, val pps: ByteArray, val vps: ByteArray?, val frameWidth: Int, val frameHeight: Int) : Item()
+    private class Frame(val annexB: ByteArray) : Item()
+
+    private val cipher = MirrorCrypto.streamCipher(aesKey, ecdhSecret, streamConnectionId)
+    private val serverSocket = ServerSocket(0)            // OS-assigned free port
+    private val queue = ArrayBlockingQueue<Item>(QUEUE_CAPACITY)
+    private val decoderStopped = CountDownLatch(1)
+
+    @Volatile private var running = false
+    @Volatile private var decoderStarted = false
+    @Volatile private var client: Socket? = null
+    @Volatile private var decoder: VideoDecoder? = null   // owned by the decoder thread
+    private var lastSps: ByteArray? = null
+    private var lastPps: ByteArray? = null
+    private var lastVps: ByteArray? = null
+    private var configWidth = width
+    private var configHeight = height
+    // The Surface the current decoder was built against. The SurfaceView destroys its Surface when
+    // the app backgrounds and creates a NEW one on return, so we watch for the identity changing
+    // and rebuild the decoder — otherwise video stays black after foregrounding.
+    @Volatile private var configuredSurface: Surface? = null
+    @Volatile private var surfaceChanged = false
+    private var decoderRetryAfterMs = 0L
+    private var framePtsUs = 0L
+    private var framesIn = 0
+    private var framesDropped = 0
+    private var lastStatMs = 0L
+    // Set by the reader thread when a frame is dropped under load; the decoder thread then skips
+    // frames until the next keyframe (IDR) so it never decodes a reference-broken, corrupt stream.
+    @Volatile private var awaitingKeyframe = false
+    // 从最近一个关键帧（IDR）开始的所有帧。解码器不得不重建时（Surface 换了且不支持原地切换、
+    // 切后台回来）立刻把这一组重新喂一遍就能出画面，不用干等下一个 IDR —— 镜像画面静止时
+    // iPhone 可能很久才发一次关键帧，期间会一直黑屏。只在解码线程里读写。
+    private val gopCache = ArrayList<ByteArray>()
+    private var gopCacheBytes = 0
+    private var gopCacheValid = false
+    // 读线程丢帧时置位，解码线程据此作废缓存（缺帧的 GOP 重放出来是花的）
+    @Volatile private var gopCacheBroken = false
+    // Set while an AirPlay video-URL handoff owns the Surface (iOS plays a full-screen web/app video
+    // during a mirror and POSTs /play). A Surface takes only ONE producer at a time, so the decoder
+    // thread releases its MediaCodec (freeing the Surface for MediaPlayer) and drops frames until
+    // [resumeDecoding]; SPS/PPS updates that arrive meanwhile are still cached.
+    @Volatile private var suspended = false
+    @Volatile private var suspendLatch: CountDownLatch? = null
+
+    /** The OS-assigned TCP port macOS should connect to (returned in the SETUP response). */
+    val dataPort: Int get() = serverSocket.localPort
+
+    fun start(scope: CoroutineScope) {
+        running = true
+        decoderStarted = true
+        scope.launch(Dispatchers.IO) { runReader() }
+        scope.launch(Dispatchers.IO) { runDecoder() }
+    }
+
+    fun stop() {
+        running = false
+        runCatching { client?.close() }
+        runCatching { serverSocket.close() }
+        queue.clear()
+        // A replacement stream may immediately reuse the Surface. Release its old producer first.
+        if (decoderStarted && !decoderStopped.await(SUSPEND_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
+            Logger.w("Mirror decoder release timed out")
+        }
+        Logger.i("MirrorStreamServer stopped")
+    }
+
+    /**
+     * Releases the mirror decoder so the URL-video player can attach to the shared Surface. Blocks
+     * until the decoder thread has let go (or [SUSPEND_TIMEOUT_MS]); returns true if it did.
+     */
+    fun suspendDecoding(): Boolean {
+        if (!running) return true
+        val latch = CountDownLatch(1)
+        suspendLatch = latch
+        suspended = true
+        val released = latch.await(SUSPEND_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        Logger.i("Mirror decoding suspended for URL video (surface released=$released)")
+        return released
+    }
+
+    /** Ends [suspendDecoding]: the decoder is rebuilt from the cached SPS/PPS and resyncs at the next IDR. */
+    fun resumeDecoding() {
+        if (!suspended) return
+        suspended = false
+        Logger.i("Mirror decoding resumed after URL video")
+    }
+
+    val isSuspended: Boolean get() = suspended
+
+    /** Recovery runs on the decoder thread, even when the sender's screen is static. */
+    fun onSurfaceChanged() {
+        surfaceChanged = true
+    }
+
+    // ─── Network reader thread: read + decrypt (ordered), enqueue, never block on decode ──────
+    private fun runReader() {
+        try {
+            Logger.i("MirrorStreamServer listening on data port $dataPort")
+            val socket = serverSocket.accept().also { client = it }
+            Logger.i("Mirror data connection from ${socket.inetAddress.hostAddress}")
+            val input = socket.getInputStream()
+            val header = ByteArray(128)
+            while (running && !socket.isClosed) {
+                if (!readFully(input, header, 128)) break
+                val payloadSize = leInt(header, 0)
+                val payloadType = leShort(header, 4) and 0xFF
+                if (payloadSize <= 0 || payloadSize > MAX_PAYLOAD) {
+                    Logger.w("Mirror: bad payloadSize=$payloadSize type=$payloadType — stopping")
+                    break
+                }
+                val payload = ByteArray(payloadSize)
+                if (!readFully(input, payload, payloadSize)) break
+                StreamStats.videoBytesTotal += payloadSize
+                when (payloadType) {
+                    0 -> {
+                        // ALWAYS advance the AES-CTR keystream, in order, for every video payload —
+                        // skipping any packet desyncs the keystream and corrupts all later frames.
+                        val annexB = MirrorCrypto.avccToAnnexB(cipher.update(payload))
+                        if (annexB.isNotEmpty()) enqueue(Frame(annexB))
+                    }
+                    1 -> {
+                        parseConfig(payload, header)?.let { enqueue(it) }
+                    }
+                    else -> Logger.v("Mirror: ignoring payload type $payloadType ($payloadSize B)")
+                }
+            }
+        } catch (e: Exception) {
+            if (running) Logger.e("Mirror reader error", e)
+        } finally {
+            running = false
+            Logger.i("Mirror data connection ended")
+        }
+    }
+
+    /** Bounded enqueue — if the decoder is behind, drop the oldest item to keep latency bounded. */
+    private fun enqueue(item: Item) {
+        framesIn++
+        StreamStats.videoFramesTotal++
+        if (!queue.offer(item)) {
+            queue.poll()
+            queue.offer(item)
+            framesDropped++
+            awaitingKeyframe = true        // a frame was lost — resync the decoder at the next IDR
+            gopCacheBroken = true
+        }
+        StreamStats.videoQueue = queue.size
+        if (framesIn % 300 == 0) {
+            val now = System.currentTimeMillis()
+            if (lastStatMs != 0L) StreamStats.videoFps = (300_000L / (now - lastStatMs).coerceAtLeast(1)).toInt()
+            lastStatMs = now
+            StreamStats.videoDropPct = framesDropped * 100 / framesIn
+            Logger.i("Video stats: in=$framesIn dropped=$framesDropped " +
+                "(${StreamStats.videoDropPct}%) queue=${queue.size}/$QUEUE_CAPACITY ${StreamStats.videoFps}fps")
+        }
+    }
+
+    private fun parseConfig(payload: ByteArray, header: ByteArray): Config? = try {
+        val parsed = AirPlayVideoConfigParser.parse(payload)
+        val w = Float.fromBits(leInt(header, 56))
+        val h = Float.fromBits(leInt(header, 60))
+        val valid = w.isFinite() && h.isFinite() && w in 128f..7680f && h in 128f..4320f
+        Logger.i("Mirror codec=${if (parsed.vps != null) "HEVC" else "AVC"} size=${if (valid) w.toInt() else width}x${if (valid) h.toInt() else height}")
+        Config(parsed.sps, parsed.pps, parsed.vps, if (valid) w.toInt() else width, if (valid) h.toInt() else height)
+    } catch (e: Exception) {
+        val prefix = payload.take(64).joinToString(" ") { "%02x".format(it.toInt() and 255) }
+        Logger.w("Mirror codec config rejected: size=${payload.size} prefix=$prefix")
+        Logger.e("Mirror: failed to parse video codec configuration", e); null
+    }
+
+    // ─── Decoder thread: consume the queue; the only thread that touches the decoder ──────────
+    private fun runDecoder() {
+        try {
+            while (running) {
+                if (suspended) releaseForSuspend()
+                val item = queue.poll(200, TimeUnit.MILLISECONDS)
+                if (suspended) {
+                    // URL video owns the Surface: keep the latest config for the resume, drop frames.
+                    if (item is Config) {
+                        lastSps = item.sps; lastPps = item.pps; lastVps = item.vps
+                        configWidth = item.frameWidth; configHeight = item.frameHeight
+                    }
+                    continue
+                }
+                try {
+                    if (item == null) refreshSurface()
+                    when (item) {
+                        is Config -> configureDecoder(item)
+                        is Frame -> decodeFrame(item.annexB)
+                        null -> Unit
+                    }
+                } catch (e: Exception) {
+                    // A Surface can be destroyed during configure/switch. Keep draining and retry
+                    // with the cached config, rather than permanently losing the decoder thread.
+                    Logger.e("Mirror decoder failed — retrying when Surface is ready", e)
+                    decoder?.release()
+                    decoder = null
+                    configuredSurface = null
+                    decoderRetryAfterMs = android.os.SystemClock.elapsedRealtime() + DECODER_RETRY_MS
+                }
+            }
+        } catch (e: Exception) {
+            if (running) Logger.e("Mirror decoder thread error", e)
+        } finally {
+            try {
+                decoder?.release()
+                decoder = null
+            } finally {
+                decoderStopped.countDown()
+            }
+        }
+    }
+
+    /** Decoder thread: drop the MediaCodec (disconnecting it from the Surface) and ack [suspendDecoding]. */
+    private fun releaseForSuspend() {
+        decoder?.let { it.release(); decoder = null }
+        configuredSurface = null        // forces a rebuild against the live Surface on resume
+        clearGopCache()                 // 暂停期间的帧都丢了，缓存不再连续
+        suspendLatch?.let { it.countDown(); suspendLatch = null }
+    }
+
+    private fun configureDecoder(config: Config) {
+        val sps = config.sps
+        val pps = config.pps
+        // New SPS/PPS (or first config) — cache it and (re)build against the current surface.
+        val d = decoder
+        val surface = surfaceProvider()?.takeIf { it.isValid }
+        val sameVps = config.vps?.contentEquals(lastVps) ?: (lastVps == null)
+        if (d != null && d.isHealthy && sps.contentEquals(lastSps) && pps.contentEquals(lastPps) && sameVps &&
+            configWidth == config.frameWidth && configHeight == config.frameHeight &&
+            surface === configuredSurface) return
+        lastSps = sps
+        lastPps = pps
+        lastVps = config.vps
+        configWidth = config.frameWidth
+        configHeight = config.frameHeight
+        clearGopCache()                    // 新配置（可能换了分辨率）之后旧帧不能再用
+        rebuildDecoder(surface)
+    }
+
+    /**
+     * (Re)creates the decoder for [surface] from the cached SPS/PPS. Safe to call on a surface
+     * change (app background→foreground): releases the old decoder and resyncs at the next keyframe.
+     * If the Surface or config is unavailable, leaves the decoder null; the idle poll and later
+     * frames retry from the cached SPS/PPS.
+     */
+    private fun rebuildDecoder(surface: Surface?) {
+        decoder?.release()
+        decoder = null
+        configuredSurface = surface
+        val sps = lastSps ?: return
+        val pps = lastPps ?: return
+        if (android.os.SystemClock.elapsedRealtime() < decoderRetryAfterMs) return
+        if (surface == null) return                            // backgrounded — wait for the surface to return
+        if (!surface.isValid) return
+        val mime = if (lastVps != null) "video/hevc" else "video/avc"
+        val candidate = VideoDecoder(surface)
+        try {
+            candidate.initialize(sps, pps, configWidth, configHeight, mime, lastVps)
+            decoder = candidate
+        } catch (e: Exception) {
+            candidate.release()
+            throw e
+        }
+        awaitingKeyframe = true                                // a fresh decoder must start at an IDR
+        StreamStats.videoRes = "${configWidth}x${configHeight}"
+        Logger.i("Mirror decoder (re)built for surface (sps=${sps.size}B pps=${pps.size}B)")
+    }
+
+    private fun clearGopCache() {
+        gopCache.clear()
+        gopCacheBytes = 0
+        gopCacheValid = false
+    }
+
+    private fun cacheFrame(annexB: ByteArray) {
+        if (gopCacheBroken) {
+            gopCacheBroken = false
+            clearGopCache()
+        }
+        if (isKeyframe(annexB)) {
+            clearGopCache()
+            gopCacheValid = true
+        }
+        if (!gopCacheValid) return
+        gopCache.add(annexB)
+        gopCacheBytes += annexB.size
+        // GOP 太长就放弃缓存（重放太久反而慢），退回等下一个关键帧
+        if (gopCache.size > GOP_CACHE_MAX_FRAMES || gopCacheBytes > GOP_CACHE_MAX_BYTES) clearGopCache()
+    }
+
+    private fun decodeFrame(annexB: ByteArray) {
+        cacheFrame(annexB)
+        if (refreshSurface()) return // GOP replay already includes this frame.
+        val d = decoder ?: return                              // need surface + SPS/PPS first
+        if (!d.isHealthy) {                                    // retry with cached config
+            Logger.w("Mirror: decoder unhealthy — rebuilding from cached SPS/PPS")
+            d.release(); decoder = null; configuredSurface = null
+            return
+        }
+        if (awaitingKeyframe) {
+            // After a dropped frame the stream is reference-broken; skip until the next IDR so we
+            // don't feed the decoder predicted frames with missing references (which smear/blocky).
+            if (!isKeyframe(annexB)) return
+            awaitingKeyframe = false
+            Logger.i("Mirror: resynced on keyframe after a dropped frame")
+        }
+        if (framePtsUs == 0L) Logger.i("Mirror: first video frame fed to decoder (${annexB.size}B)")
+        d.decodeNalUnit(annexB, framePtsUs)
+        framePtsUs += FRAME_INTERVAL_US
+    }
+
+    /** Only the decoder thread may touch MediaCodec. Poll even with an empty frame queue. */
+    private fun refreshSurface(): Boolean {
+        val notified = surfaceChanged
+        surfaceChanged = false
+        val liveSurface = surfaceProvider()?.takeIf { it.isValid }
+        if (liveSurface === configuredSurface && !notified &&
+            (decoder?.isHealthy == true || liveSurface == null)) return false
+        val current = decoder
+        if (current != null && current.isHealthy && liveSurface != null &&
+            current.switchOutputSurface(liveSurface)) {
+            configuredSurface = liveSurface
+            Logger.i("Mirror: switched decoder output to the live Surface")
+            // setOutputSurface alone does not redraw a static sender's last image.
+            return replayGopCache()
+        } else {
+            rebuildDecoder(liveSurface)
+            return replayGopCache()
+        }
+        return false
+    }
+
+    /** 新建的解码器立刻重放缓存的 GOP（含当前帧），马上恢复画面。缓存不可用时返回 false。 */
+    private fun replayGopCache(): Boolean {
+        val d = decoder ?: return false
+        if (!gopCacheValid || gopCache.isEmpty()) return false
+        for (frame in gopCache) {
+            d.decodeNalUnit(frame, framePtsUs)
+            framePtsUs += FRAME_INTERVAL_US
+        }
+        awaitingKeyframe = false
+        Logger.i("Mirror: replayed ${gopCache.size} cached frames (${gopCacheBytes / 1024}KB) — no wait for next IDR")
+        return true
+    }
+
+    /** The first VCL NAL must be AVC IDR or HEVC IRAP before decoding can resynchronize. */
+    private fun isKeyframe(annexB: ByteArray): Boolean {
+        return AirPlayVideoConfigParser.containsRandomAccessFrame(annexB, lastVps != null)
+    }
+
+    private fun readFully(input: InputStream, buf: ByteArray, len: Int): Boolean {
+        var read = 0
+        while (read < len) {
+            val n = input.read(buf, read, len - read)
+            if (n == -1) return false
+            read += n
+        }
+        return true
+    }
+
+    private fun leInt(b: ByteArray, off: Int): Int =
+        (b[off].toInt() and 0xFF) or ((b[off + 1].toInt() and 0xFF) shl 8) or
+            ((b[off + 2].toInt() and 0xFF) shl 16) or ((b[off + 3].toInt() and 0xFF) shl 24)
+
+    private fun leShort(b: ByteArray, off: Int): Int =
+        (b[off].toInt() and 0xFF) or ((b[off + 1].toInt() and 0xFF) shl 8)
+
+    companion object {
+        private const val MAX_PAYLOAD = 8 * 1024 * 1024        // 8 MB sanity cap per frame
+        private const val FRAME_INTERVAL_US = 1_000_000L / 60  // monotonic PTS hint (~60fps)
+        private const val QUEUE_CAPACITY = 90                  // ~1.5s @60fps before dropping
+        private const val GOP_CACHE_MAX_FRAMES = 600           // ~10s @60fps
+        private const val GOP_CACHE_MAX_BYTES = 24 * 1024 * 1024
+        private const val SUSPEND_TIMEOUT_MS = 2000L
+        private const val DECODER_RETRY_MS = 500L
+    }
+}
+

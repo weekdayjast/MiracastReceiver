@@ -96,4 +96,34 @@
     <string name="notification_channel_description">保持投影接收服務執行</string>
     <string name="notification_waiting">正在等待 AirPlay/DLNA/Miracast 投影連線</string>
     <string name="notification_stop_cast">停止投屏</string>
+
+    <!-- Receiver status and AirPlay controls -->
+    <string name="status_waiting_network">正在等待網路位址，請檢查網路連線。</string>
+    <string name="status_receiver_running">接收服務已啟動，正在等待連線。</string>
+    <string name="status_receiver_stopped">接收服務已停止，請重新開啟應用程式以重試。</string>
+    <string name="status_miracast_checking">正在檢查 Windows / Android 螢幕鏡像…</string>
+    <string name="status_miracast_advertising">Miracast 探索已設定。Windows 請按 Win+K，Android 請開啟無線顯示；能否找到裝置也取決於驅動程式。</string>
+    <string name="status_miracast_system">系統無線顯示已開啟。若 Win+K 找不到裝置，請開啟系統螢幕鏡像接收功能後重試；僅開啟此開關不代表支援接收。</string>
+    <string name="status_miracast_root_required">無法使用 Windows / Android 螢幕鏡像：尚未取得 root 權限。若裝置內建系統鏡像接收功能，請先開啟；否則需要 root 才能啟用探索。仍可使用 AirPlay、DLNA 和 VLC Cast。</string>
+    <string name="status_miracast_failed">無法設定 Windows / Android 螢幕鏡像。請檢查系統鏡像、Wi-Fi Direct 支援及 root 授權，然後重新開啟應用程式；若仍失敗，請附上 ADB 記錄。其他投放方式仍可使用。</string>
+    <string name="status_miracast_unsupported">此裝置未提供 Windows / Android 螢幕鏡像所需的 Wi-Fi Direct，請使用 AirPlay、DLNA 或 VLC Cast。</string>
+    <string name="status_miracast_permission">Windows / Android 螢幕鏡像需要「附近的裝置」或位置權限，請在設定中授權後重新開啟應用程式。</string>
+    <string name="status_miracast_wifi_disabled">Windows / Android 螢幕鏡像需要 Wi-Fi Direct，請開啟 Wi-Fi 後重新開啟應用程式；僅有乙太網路連線並不足夠。</string>
+    <string name="castplus_enable">華為 Cast+ 接收功能（實驗性）</string>
+    <string name="castplus_off">Cast+ 已關閉，開啟後可測試華為手機的無線投影。</string>
+    <string name="castplus_unsupported">Cast+ 需要 Android 6 以上版本及 ARM 裝置。</string>
+    <string name="castplus_permission">Cast+ 需要位置權限；Android 13 以上版本還需要「附近的裝置」權限。請授權後重新開啟應用程式。</string>
+    <string name="castplus_starting">正在啟動 Cast+ 接收功能…</string>
+    <string name="castplus_ready">Cast+ 已就緒，請在華為手機上開啟無線投影。</string>
+    <string name="castplus_pairing">Cast+ 正在等待連線確認或 PIN 碼。</string>
+    <string name="castplus_connecting">正在連接華為手機…</string>
+    <string name="castplus_playing">華為 Cast+ 正在顯示手機畫面。</string>
+    <string name="castplus_paused">華為 Cast+ 已暫停。</string>
+    <string name="castplus_disconnecting">正在中斷華為 Cast+ 連線…</string>
+    <string name="castplus_error">Cast+ 無法啟動或連線失敗，請關閉後重新開啟；若仍失敗，請附上接收端的 ADB 記錄。</string>
+    <string name="castplus_request">%1$s 想透過華為 Cast+ 連線。</string>
+    <string name="castplus_pin">請在手機上輸入此 PIN 碼：%1$s</string>
+    <string name="castplus_exit">停止投放</string>
+    <string name="receiver_default_name">客廳電視</string>
+    <string name="subtitles_follow_sender">請在傳送端裝置選擇字幕。</string>
 </resources>

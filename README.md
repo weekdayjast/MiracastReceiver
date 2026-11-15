@@ -27,9 +27,13 @@
 
 ## 中文
 
-### AirPlay 投屏 YouTube 进展（2026-11-07）
+### UxPlay 回归版本
 
-v1.2.13 + UxPlay 测试包已验证 YouTube 播放与换片，并修复镜像裁切、分辨率切换解码错误、有声音无画面及设备名称问题；字幕同步已实现，仍需完整回归。待解决广告自然结束后自动进入正片、手机画质选择与电视实际分辨率同步。上述结果针对测试包，尚不代表正式发布版。[详情](MiracastReceiver/AIRPLAY-YOUTUBE-STATUS.md)
+ARM32 / ARM64 UxPlay 整理版保留已验证的 YouTube 播放、换片、字幕和镜像修复，清理临时协议日志并补齐现有语言资源。广告自动衔接与手机画质同步仍待验证。[详情](MiracastReceiver/AIRPLAY-UXPLAY.md)
+
+v1.2.15 的 UxPlay 安装包要求 Android 6 及以上，应用 ID 为 `top.jast.miracastreceiver`。可覆盖安装 v1.2.14 并保留设置；更早使用不同包名的应用需先退出，避免端口冲突。
+
+v1.2.15 修复小米相册 DLNA 连接、AirPlay 竖屏视频旋转后画面过小，以及 UxPlay 未应用旋转后分辨率声明的问题。改变接收端旋转方向后，需在 iPhone 停止投屏并重新连接，才会协商新的实际码流分辨率。
 
 ### ✨ 功能特性
 
@@ -185,6 +189,8 @@ cd MiracastReceiver
 
 ### 🙏 致谢与参考
 
+- 感谢 [UxPlay](https://github.com/FDH2/UxPlay) 提供 AirPlay 协议实现，以及 [android-airplay-server](https://github.com/jqssun/android-airplay-server) 提供 Android 接入与渲染参考；相关代码保留各自的许可证与来源声明。
+
 - AirPlay 屏幕镜像实现借鉴并参考了 [PhairPlay](https://github.com/mazer666/PhairPlay) 项目的协议流程与实现思路。
 - Google Cast 媒体接收参考了 [openchromecast](https://github.com/yukarikaname/openchromecast) 的协议定义与实现流程，保留其 MIT 许可声明。
 
@@ -214,7 +220,7 @@ cd MiracastReceiver
    - Android 10 起系统禁止后台弹出界面。未打开本应用时（开机自启后、或退回桌面后）投屏，
      播放页会被系统拦截，表现为投屏没有反应
    - 首次打开应用时会弹窗引导到系统设置页开启；如果电视没有该设置页，可用 adb 开启：
-     `adb shell appops set com.weekd.miracastreceiver SYSTEM_ALERT_WINDOW allow`
+     `adb shell appops set top.jast.miracastreceiver SYSTEM_ALERT_WINDOW allow`
 
 5. **Android Miracast 屏幕旋转后的分辨率声明尚未解决**
    - 已支持接收端旋转、角度保存和黑边内容适配，但部分 Android 发送端仍选择横屏 1920×1080 视频帧，将竖屏内容缩小后加黑边发送
@@ -382,6 +388,8 @@ Output APKs: `app/build/outputs/apk/`
 
 ### 🙏 Acknowledgements & References
 
+- Thanks to [UxPlay](https://github.com/FDH2/UxPlay) for its AirPlay protocol implementation and [android-airplay-server](https://github.com/jqssun/android-airplay-server) for the Android integration and rendering reference. Their license and source notices are retained.
+
 - AirPlay screen mirroring is inspired by and references the protocol flow and implementation ideas from [PhairPlay](https://github.com/mazer666/PhairPlay).
 - Google Cast media reception references [openchromecast](https://github.com/yukarikaname/openchromecast), with its MIT copyright and license retained.
 
@@ -411,7 +419,7 @@ Output APKs: `app/build/outputs/apk/`
    - Since Android 10, apps may not open screens from the background. When the app is not open
      (after auto-start on boot, or after returning to the home screen), the player is blocked and casting appears to do nothing
    - The app prompts for it on first launch and opens the system settings page; if the TV has no such page, grant it via adb:
-     `adb shell appops set com.weekd.miracastreceiver SYSTEM_ALERT_WINDOW allow`
+     `adb shell appops set top.jast.miracastreceiver SYSTEM_ALERT_WINDOW allow`
 
 5. **Unresolved: resolution declaration after rotating Android Miracast**
    - Receiver rotation, saved angles and black-bar fitting are supported, but some Android senders still transmit portrait content inside a landscape 1920×1080 frame
@@ -453,9 +461,11 @@ If you find this project helpful, please give it a star!
 
 Thanks to the following contributors for their code, improvements, and device testing, and to everyone who reports issues, shares logs, and helps test the app.
 
-| 贡献者 / Contributor | 贡献 / Contributions |
-| --- | --- |
-| [@arjuntam](https://github.com/arjuntam) | 横屏双栏布局、投屏退出行为设置及设备验证（[#28](https://github.com/weekdayjast/MiracastReceiver/pull/28)、[#29](https://github.com/weekdayjast/MiracastReceiver/pull/29)） / Landscape layout, configurable exit behavior, and device testing |
-| [@Googler0825](https://github.com/Googler0825) | 4K AirPlay HEVC 协商、解码与设备验证（[#26](https://github.com/weekdayjast/MiracastReceiver/pull/26)） / 4K AirPlay HEVC negotiation, decoding, and device testing |
+| 贡献者 / Contributor |
+| --- |
+| [@arjuntam](https://github.com/arjuntam) |
+| [@Googler0825](https://github.com/Googler0825) |
+| [@aby1987](https://github.com/aby1987) |
+| [@dcstf](https://github.com/dcstf) |
 
 [查看完整贡献者名单 / View all contributors](https://github.com/weekdayjast/MiracastReceiver/graphs/contributors)

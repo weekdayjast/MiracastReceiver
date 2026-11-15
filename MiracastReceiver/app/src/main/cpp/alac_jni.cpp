@@ -5,7 +5,7 @@
  * regardless of what /info advertises. This TV (and most Android TVs) has no hardware ALAC codec,
  * so we decode in software here: AES-CBC-decrypted ALAC frame → 16-bit interleaved PCM → AudioTrack.
  *
- * Backs com.weekd.miracastreceiver.airplay.handshake.AlacDecoder.
+ * Backs top.jast.miracastreceiver.airplay.handshake.AlacDecoder.
  */
 #include <jni.h>
 #include <cstdint>
@@ -26,7 +26,7 @@ extern "C" {
  * numChannels, maxRun, sampleRate, …) built by AlacDecoder.buildMagicCookie().
  */
 JNIEXPORT jlong JNICALL
-Java_com_weekd_miracastreceiver_airplay_handshake_AlacDecoder_nativeInit(JNIEnv *env, jobject, jbyteArray cookie) {
+Java_top_jast_miracastreceiver_airplay_handshake_AlacDecoder_nativeInit(JNIEnv *env, jobject, jbyteArray cookie) {
     if (cookie == nullptr) return 0;
     const jsize len = env->GetArrayLength(cookie);
     if (len <= 0) return 0;
@@ -57,7 +57,7 @@ Java_com_weekd_miracastreceiver_airplay_handshake_AlacDecoder_nativeInit(JNIEnv 
  * input holds one decrypted ALAC frame; output must be sized for frameLength*numChannels*2 bytes.
  */
 JNIEXPORT jint JNICALL
-Java_com_weekd_miracastreceiver_airplay_handshake_AlacDecoder_nativeDecode(
+Java_top_jast_miracastreceiver_airplay_handshake_AlacDecoder_nativeDecode(
         JNIEnv *env, jobject, jlong handle, jbyteArray input, jint inputLen, jbyteArray output) {
     if (handle == 0 || input == nullptr || output == nullptr) return -1;
     auto *decoder = reinterpret_cast<ALACDecoder *>(handle);
@@ -102,7 +102,7 @@ Java_com_weekd_miracastreceiver_airplay_handshake_AlacDecoder_nativeDecode(
 }
 
 JNIEXPORT void JNICALL
-Java_com_weekd_miracastreceiver_airplay_handshake_AlacDecoder_nativeRelease(JNIEnv *, jobject, jlong handle) {
+Java_top_jast_miracastreceiver_airplay_handshake_AlacDecoder_nativeRelease(JNIEnv *, jobject, jlong handle) {
     if (handle == 0) return;
     delete reinterpret_cast<ALACDecoder *>(handle);
 }
