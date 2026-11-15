@@ -122,4 +122,6 @@
     <string name="castplus_request">设备 %1$s 请求通过华为 Cast+ 投屏。</string>
     <string name="castplus_pin">请在手机上输入 PIN：%1$s</string>
     <string name="castplus_exit">退出投屏</string>
+    <string name="receiver_settings">设置</string>
+    <string name="receiver_home_title">投屏接收设备</string>
 </resources>

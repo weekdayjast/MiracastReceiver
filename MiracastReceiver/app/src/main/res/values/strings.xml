@@ -125,4 +125,6 @@
     <string name="castplus_request">%1$s wants to connect using Huawei Cast+.</string>
     <string name="castplus_pin">Enter this PIN on the phone: %1$s</string>
     <string name="castplus_exit">Stop casting</string>
+    <string name="receiver_settings">Settings</string>
+    <string name="receiver_home_title">Casting receiver</string>
 </resources>

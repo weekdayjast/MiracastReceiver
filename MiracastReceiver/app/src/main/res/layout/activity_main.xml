@@ -1,225 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  首页。原先用 RelativeLayout 把标题/内容/说明分别贴顶、居中、贴底，
-  字号又是为 4K 电视写死的大号，屏幕一小（或电视有 overscan）三块就会互相重叠。
-  改成 ScrollView + 纵向流式布局：内容从上到下顺序排列，永远不会重叠，
-  放不下时可以滚动。字号整体调小，手机和电视都能正常显示。
--->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/background_dark"
-    android:fillViewport="true"
-    android:scrollbars="none"
-    tools:context=".ui.MainActivity">
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:paddingLeft="24dp"
-        android:paddingTop="24dp"
-        android:paddingRight="24dp"
-        android:paddingBottom="24dp">
-
-        <!-- 应用标题 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textColor="@color/text_primary"
-            android:textSize="28sp"
-            android:textStyle="bold" />
-
-        <View
-            android:layout_width="120dp"
-            android:layout_height="3dp"
-            android:layout_marginTop="10dp"
-            android:background="@color/accent" />
-
-        <!-- 设备名称 -->
-        <TextView
-            android:id="@+id/tv_device_name"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="@drawable/bg_device_name"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:ellipsize="end"
-            android:gravity="center"
-            android:maxLines="2"
-            android:textColor="@color/text_primary"
-            android:textSize="20sp"
-            tools:text="智能电视" />
-
-        <!-- 设备 IP -->
-        <TextView
-            android:id="@+id/tv_device_ip"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:maxLines="1"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp"
-            tools:text="设备 IP: 192.168.1.100" />
-
-        <!-- 状态 -->
-        <TextView
-            android:id="@+id/tv_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:gravity="center"
-            android:text="@string/waiting_connection"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
-
-        <TextView
-            android:id="@+id/tv_miracast_status"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center"
-            android:textColor="@color/text_secondary"
-            android:textSize="14sp"
-            android:visibility="gone" />
-
-        <ProgressBar
-            android:id="@+id/startup_progress"
-            android:layout_width="28dp"
-            android:layout_height="28dp"
-            android:layout_marginTop="10dp"
-            android:indeterminate="true"
-            android:indeterminateTint="@color/accent" />
-
-        <!-- 设置：开机自启 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:addStatesFromChildren="true"
-            android:background="@drawable/bg_setting_item"
-            android:orientation="vertical"
-            android:padding="14dp">
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_auto_start"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:text="@string/auto_start_on_boot"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:lineSpacingExtra="2dp"
-                android:text="@string/auto_start_on_boot_hint"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-        <!-- 设置：投屏结束后去哪 -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:addStatesFromChildren="true"
-            android:background="@drawable/bg_setting_item"
-            android:orientation="vertical"
-            android:padding="14dp">
-
-            <androidx.appcompat.widget.SwitchCompat
-                android:id="@+id/switch_return_to_app"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:focusable="true"
-                android:focusableInTouchMode="false"
-                android:text="@string/return_to_app_after_cast"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp" />
-
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:lineSpacingExtra="2dp"
-                android:text="@string/return_to_app_after_cast_hint"
-                android:textColor="@color/text_secondary"
-                android:textSize="12sp" />
-        </LinearLayout>
-
-
-        <!-- 设置：界面语言 -->
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/switch_auto_rotate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_setting_item"
-            android:padding="14dp"
-            android:focusable="true"
-            android:text="@string/auto_rotate_to_fit"
-            android:textColor="@color/text_primary"
-            android:textSize="16sp" />
-
-        <include layout="@layout/setting_castplus" />
-
-        <LinearLayout
-            android:id="@+id/setting_language"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:background="@drawable/bg_setting_item"
-            android:clickable="true"
-            android:focusable="true"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:padding="14dp">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/language"
-                android:textColor="@color/text_primary"
-                android:textSize="16sp" />
-
-            <TextView
-                android:id="@+id/tv_language_value"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textColor="@color/accent"
-                android:textSize="16sp"
-                tools:text="English" />
-        </LinearLayout>
-
-        <!-- 连接说明 -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:text="@string/how_to_connect"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:gravity="center"
-            android:lineSpacingExtra="3dp"
-            android:text="@string/connect_instruction"
-            android:textColor="@color/text_secondary"
-            android:textSize="13sp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@color/background_dark" android:padding="24dp" tools:context=".ui.MainActivity">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="56dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="@string/app_name" android:textColor="@color/text_primary" android:textSize="20sp" android:fontFamily="sans-serif-medium" />
+        <androidx.appcompat.widget.AppCompatImageButton android:id="@+id/button_settings" android:layout_width="48dp" android:layout_height="48dp" android:padding="12dp" android:background="@drawable/bg_setting_item" android:src="@drawable/ic_settings" android:contentDescription="@string/receiver_settings" android:focusable="true" android:nextFocusDown="@id/tv_device_name" android:nextFocusLeft="@id/tv_device_name" />
     </LinearLayout>
-
-</ScrollView>
+    <ScrollView android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:fillViewport="true" android:scrollbars="none">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center_vertical" android:paddingTop="24dp" android:paddingBottom="24dp" android:baselineAligned="false">
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"  android:orientation="vertical" android:gravity="center_horizontal">
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/receiver_home_title" android:textColor="@color/text_secondary" android:textSize="16sp" />
+    <TextView android:id="@+id/tv_device_name" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:padding="12dp" android:clickable="true" android:focusable="true" android:background="@drawable/bg_device_name" android:textColor="@color/text_primary" android:textSize="26sp" android:maxLines="2" android:ellipsize="end" android:nextFocusUp="@id/button_settings" android:nextFocusRight="@id/button_settings" tools:text="Google TV Streamer" />
+    <TextView android:id="@+id/tv_device_ip" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="@color/text_secondary" android:textSize="16sp" tools:text="192.168.199.132" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="28dp" android:gravity="center_vertical" android:orientation="horizontal">
+        <ProgressBar android:id="@+id/startup_progress" android:layout_width="24dp" android:layout_height="24dp" android:indeterminateTint="@color/accent" />
+        <TextView android:id="@+id/tv_status" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginStart="12dp" android:text="@string/waiting_connection" android:textColor="@color/text_primary" android:textSize="20sp" />
+    </LinearLayout>
+    <TextView android:id="@+id/tv_miracast_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="12dp" android:textColor="@color/text_secondary" android:textSize="14sp" />
+    <TextView android:id="@+id/tv_castplus_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="10dp" android:textColor="@color/text_secondary" android:textSize="14sp" />
+</LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="32dp" android:orientation="vertical" android:background="@drawable/bg_settings_panel" android:padding="24dp">
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="@string/how_to_connect" android:textColor="@color/text_primary" android:textSize="18sp" android:textStyle="bold" />
+    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:text="@string/connect_instruction" android:textColor="@color/text_secondary" android:textSize="15sp" android:lineSpacingExtra="6dp" />
+</LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>

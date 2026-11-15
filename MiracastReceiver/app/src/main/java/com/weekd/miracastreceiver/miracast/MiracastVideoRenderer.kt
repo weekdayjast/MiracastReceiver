@@ -16,7 +16,10 @@ import timber.log.Timber
  *
  * @param surfaceProvider 取当前可用的 Surface；应用切后台时会返回 null
  */
-class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
+class MiracastVideoRenderer(
+    private val surfaceProvider: () -> Surface?,
+    private val onRecoveryNeeded: () -> Unit = {}
+) {
 
     private data class AccessUnit(val data: ByteArray, val ptsUs: Long)
 
@@ -33,6 +36,15 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
     private var droppedBeforeConfig = 0
     private val pendingUnits = ArrayDeque<AccessUnit>()
     private var pendingBytes = 0
+    private var inputStalls = 0L
+    @Volatile private var released = false
+    private var sourceFrames = 0L
+    private var statsStartMs = 0L
+    private var lastStatsMs = 0L
+    private var firstPtsUs = 0L
+
+    /** Stop retries immediately; MediaCodec itself is released by the demux thread. */
+    fun requestStop() { released = true }
 
     /**
      * 数据有丢失时调用：残缺的帧会让解码器输出花屏，而且错误会沿着帧间预测一直传播下去，
@@ -43,11 +55,22 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
         if (!awaitingKeyframe) {
             awaitingKeyframe = true
             Timber.w("Miracast: data loss detected, waiting for next keyframe")
+            onRecoveryNeeded()
         }
     }
 
     /** [TsDemuxer] 的回调入口。 */
     fun onAccessUnit(unit: ByteArray, ptsUs: Long) {
+        if (released) return
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (statsStartMs == 0L) { statsStartMs = now; firstPtsUs = ptsUs }
+        sourceFrames++
+        if (now - lastStatsMs >= 2_000) {
+            lastStatsMs = now
+            Timber.i("Miracast video stats: units=%d, queued=%d, rendered=%d, sourceMs=%d, wallMs=%d, inputStalls=%d, waitKey=%s",
+                sourceFrames, decoder?.framesQueued ?: 0, decoder?.framesReleased ?: 0,
+                (ptsUs - firstPtsUs) / 1000, now - statsStartMs, inputStalls, awaitingKeyframe)
+        }
         captureParameterSets(unit)
 
         val surface = surfaceProvider()
@@ -93,7 +116,25 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
             Timber.i("Miracast: keyframe found, decoding started")
         }
 
-        decoder?.decodeNalUnit(unit, ptsUs)
+        val current = decoder ?: return
+        val started = System.nanoTime()
+        var stalled = false
+        // A brief codec stall must not silently break the H.264 reference chain.
+        // Keep the same AU for up to 500ms; RTP reception continues on its own thread.
+        while (!released && current.isHealthy) {
+            if (current.tryQueueNalUnit(unit, ptsUs)) {
+                if (stalled) Timber.i("Miracast: retained AU accepted after %dms (stalls=%d)",
+                    (System.nanoTime() - started) / 1_000_000, inputStalls)
+                return
+            }
+            if (!stalled) { inputStalls++; stalled = true }
+            if (System.nanoTime() - started >= 500_000_000L) break
+        }
+        if (!released) {
+            Timber.w("Miracast: codec input stalled; waiting for a clean keyframe (stalls=%d)", inputStalls)
+            onDiscontinuity()
+            releaseDecoder()
+        }
     }
 
     private fun bufferUntilSurfaceReady(unit: ByteArray, ptsUs: Long) {
@@ -184,6 +225,7 @@ class MiracastVideoRenderer(private val surfaceProvider: () -> Surface?) {
     }
 
     fun release() {
+        released = true
         releaseDecoder()
         clearPendingUnits()
         sps = null

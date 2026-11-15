@@ -21,8 +21,8 @@ android {
         applicationId = "com.weekd.miracastreceiver"
         minSdk = 21
         targetSdk = 36
-        versionCode = 18
-        versionName = "1.2.13"
+        versionCode = 25
+        versionName = "1.2.16"
         buildConfigField("boolean", "USE_UXPLAY_TEST", useUxPlayTest.toString())
         if (useUxPlayTest) minSdk = 23
 

@@ -27,7 +27,7 @@ import java.io.ByteArrayOutputStream
 class TsDemuxer(
     private val onAccessUnit: (data: ByteArray, ptsUs: Long) -> Unit,
     private val onDiscontinuity: () -> Unit = {},
-    private val onAudioPes: (codec: AudioCodec, data: ByteArray) -> Unit = { _, _ -> },
+    private val onAudioPes: (codec: AudioCodec, data: ByteArray, ptsUs: Long) -> Unit = { _, _, _ -> },
     private val onAudioDiscontinuity: () -> Unit = {}
 ) {
 
@@ -39,7 +39,7 @@ class TsDemuxer(
     private var audioCodec = AudioCodec.AAC_ADTS
 
     private val videoPes = PesAssembler("video") { data, pts -> onAccessUnit(data, pts) }
-    private val audioPes = PesAssembler("audio") { data, _ -> onAudioPes(audioCodec, data) }
+    private val audioPes = PesAssembler("audio") { data, pts -> onAudioPes(audioCodec, data, pts) }
 
     companion object {
         private const val TS_PACKET_SIZE = 188
@@ -90,11 +90,19 @@ class TsDemuxer(
             pmtPid -> parsePmt(data, payloadStart, payloadEnd, payloadUnitStart)
             videoPid -> {
                 // 丢了包的帧一定是残缺的，喂给解码器只会花屏，还会沿帧间预测扩散。
-                if (videoPes.checkContinuity(continuity)) onDiscontinuity()
+                when (videoPes.checkContinuity(continuity)) {
+                    Continuity.DUPLICATE -> return
+                    Continuity.GAP -> onDiscontinuity()
+                    Continuity.OK -> Unit
+                }
                 videoPes.onPacket(data, payloadStart, payloadEnd, payloadUnitStart)
             }
             audioPid -> {
-                if (audioPes.checkContinuity(continuity)) onAudioDiscontinuity()
+                when (audioPes.checkContinuity(continuity)) {
+                    Continuity.DUPLICATE -> return
+                    Continuity.GAP -> onAudioDiscontinuity()
+                    Continuity.OK -> Unit
+                }
                 audioPes.onPacket(data, payloadStart, payloadEnd, payloadUnitStart)
             }
         }
@@ -166,6 +174,14 @@ class TsDemuxer(
         audioPes.reset()
     }
 
+    /** Called on the demux thread, at the actual missing RTP position, before later payloads. */
+    fun onTransportDiscontinuity() {
+        videoPes.reset()
+        audioPes.reset()
+        onDiscontinuity()
+        onAudioDiscontinuity()
+    }
+
     /**
      * 把同一 PID 上的 TS 包拼回完整的 PES 负载。
      *
@@ -173,6 +189,8 @@ class TsDemuxer(
      * 判断上一帧结束 —— 这带来约一帧的固有延迟，无法避免。音频 PES 一般带长度，
      * 收满即可立刻送出，不必等下一个 PES。
      */
+    private enum class Continuity { OK, DUPLICATE, GAP }
+
     private class PesAssembler(
         private val name: String,
         private val onUnit: (data: ByteArray, ptsUs: Long) -> Unit
@@ -189,16 +207,17 @@ class TsDemuxer(
 
         /**
          * 连续计数器每包 +1（模 16），跳变即代表 TS 层丢包。
-         * @return true 表示发生了丢包，正在拼装的残缺数据已丢弃
+         * 重复的 TS 负载不重复拼装，也不应被误报为丢包。
          */
-        fun checkContinuity(continuity: Int): Boolean {
+        fun checkContinuity(continuity: Int): Continuity {
+            if (continuity == lastContinuity) return Continuity.DUPLICATE
             val gap = lastContinuity >= 0 && continuity != (lastContinuity + 1) % 16
             lastContinuity = continuity
-            if (!gap) return false
+            if (!gap) return Continuity.OK
             lossCount++
             Timber.w("TS: $name continuity gap, total $lossCount")
             discardPending()
-            return true
+            return Continuity.GAP
         }
 
         fun onPacket(data: ByteArray, start: Int, end: Int, payloadUnitStart: Boolean) {
