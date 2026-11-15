@@ -14,6 +14,16 @@ import top.jast.miracastreceiver.util.Logger
 
 /** Loopback manifest gateway. Media segments with HTTPS addresses are fetched by the player. */
 internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
+    companion object {
+        private val manifestUrl = Regex("http://127\\.0\\.0\\.1:[0-9]+/[0-9]+/manifest\\?url=.*")
+        private val playlistUri = Regex("URI=\"([^\"]+)\"")
+        private const val MAX_PREFETCH_PLAYLISTS = 24
+        private const val MAX_PREFETCH_CHARS = 4 * 1024 * 1024
+        private const val PREFETCH_BUDGET_MS = 5000L
+
+        fun isManifestUrl(url: String): Boolean = manifestUrl.matches(url)
+    }
+
     private val server = ServerSocket(0, 8, InetAddress.getByName("127.0.0.1"))
     private val worker = Executors.newCachedThreadPool()
     private class Reply {
@@ -21,10 +31,12 @@ internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
         var data: ByteArray? = null
     }
     private val pending = ConcurrentHashMap<Int, Reply>()
+    private val prefetched = mutableMapOf<String, String>()
+    private var prefetchedChars = 0
     private val sequence = AtomicInteger()
     private val generation = AtomicInteger()
     private val requestLock = Any()
-    @Volatile private var session = ""
+    private var session = ""
     @Volatile private var closed = false
 
     init {
@@ -38,10 +50,11 @@ internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
                             val input = socket.getInputStream().bufferedReader()
                             val path = input.readLine()?.split(' ')?.getOrNull(1) ?: return@use
                             while (!input.readLine().isNullOrEmpty()) { }
-                            require(path.startsWith("/${generation.get()}/manifest?url=")) { "expired playback" }
+                            val epoch = path.substringAfter('/').substringBefore('/').toInt()
+                            require(path.startsWith("/$epoch/manifest?url=")) { "invalid manifest path" }
                             val url = URLDecoder.decode(path.substringAfter("/manifest?url="), "UTF-8")
                             require(url.startsWith("mlhls://localhost/"))
-                            val data = rewrite(url, fetch(url).toString(Charsets.UTF_8)).toByteArray()
+                            val data = loadManifest(url, epoch).toByteArray()
                             val out = socket.getOutputStream()
                             out.write("HTTP/1.1 200 OK\r\nContent-Type: application/vnd.apple.mpegurl\r\nContent-Length: ${data.size}\r\nConnection: close\r\n\r\n".toByteArray())
                             out.write(data)
@@ -55,27 +68,82 @@ internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
         }
     }
 
-    fun play(url: String, sessionId: String): String {
+    fun play(url: String, sessionId: String): String = synchronized(requestLock) {
         reset()
         session = sessionId
-        return local(url)
+        local(url, generation.get())
     }
 
-    private fun local(url: String) = "http://127.0.0.1:${server.localPort}/${generation.get()}/manifest?url=" + URLEncoder.encode(url, "UTF-8")
+    private fun local(url: String, epoch: Int) = "http://127.0.0.1:${server.localPort}/$epoch/manifest?url=" + URLEncoder.encode(url, "UTF-8")
 
-    private fun fetch(url: String): ByteArray = synchronized(requestLock) {
+    private fun loadManifest(url: String, epoch: Int): String {
+        synchronized(requestLock) {
+            check(epoch == generation.get()) { "expired playback" }
+            prefetched[url]?.let { return it }
+        }
+        val text = fetch(url, epoch).toString(Charsets.UTF_8)
+        val manifest = rewrite(url, text, epoch)
+        if (text.lineSequence().any { it.startsWith("#EXT-X-STREAM-INF:") }) {
+            prefetchMediaPlaylists(url, text, epoch)
+        }
+        return manifest
+    }
+
+    // Fetch the media playlists in order before handing the master to the player.
+    // Only cache finished playlists so live manifests still refresh on demand.
+    private fun prefetchMediaPlaylists(masterUrl: String, text: String, epoch: Int) {
+        val base = URI(masterUrl)
+        val urls = text.lineSequence().map(String::trim).mapNotNull { line ->
+            when {
+                line.startsWith("#EXT-X-MEDIA:") -> playlistUri.find(line)?.groupValues?.get(1)
+                line.isNotEmpty() && !line.startsWith('#') -> line
+                else -> null
+            }
+        }.mapNotNull { runCatching { base.resolve(it).toString() }.getOrNull() }
+            .filter { it.startsWith("mlhls://localhost/") }.distinct().take(MAX_PREFETCH_PLAYLISTS)
+        val deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(PREFETCH_BUDGET_MS)
+        for (url in urls) {
+            if (synchronized(requestLock) { url in prefetched }) continue
+            val remainingMs = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime())
+            if (remainingMs <= 0) break
+            val media = runCatching { fetch(url, epoch, remainingMs).toString(Charsets.UTF_8) }
+                .getOrElse { breakPrefetch(it); return }
+            if (media.lineSequence().none { it.trim() == "#EXT-X-ENDLIST" }) continue
+            val rewritten = runCatching { rewrite(url, media, epoch) }.getOrElse { breakPrefetch(it); return }
+            synchronized(requestLock) {
+                check(epoch == generation.get()) { "expired playback" }
+                if (url !in prefetched && prefetched.size < MAX_PREFETCH_PLAYLISTS &&
+                    rewritten.length <= MAX_PREFETCH_CHARS - prefetchedChars
+                ) {
+                    prefetched[url] = rewritten
+                    prefetchedChars += rewritten.length
+                }
+            }
+        }
+    }
+
+    private fun breakPrefetch(error: Throwable) {
+        Logger.d("mlhls media prefetch ended: ${error.message}")
+    }
+
+    private fun fetch(url: String, epoch: Int, timeoutMs: Long = 15000): ByteArray {
         val id = sequence.incrementAndGet()
         val result = Reply()
-        pending[id] = result
         try {
-            send(mapOf("sessionID" to 1, "type" to "unhandledURLRequest", "request" to mapOf(
-                "FCUP_Response_ClientInfo" to 1, "FCUP_Response_ClientRef" to 40030004,
-                "FCUP_Response_RequestID" to id, "FCUP_Response_URL" to url, "sessionID" to 1,
-                "FCUP_Response_Headers" to mapOf("X-Playback-Session-Id" to session,
-                    "User-Agent" to "AppleCoreMedia/1.0.0.11B554a (Apple TV; U; CPU OS 7_0_4 like Mac OS X; en_us")
-            )))
-            check(result.latch.await(15, TimeUnit.SECONDS)) { "sender resource timeout" }
-            result.data ?: error("sender resource failed or cancelled")
+            synchronized(requestLock) {
+                check(epoch == generation.get()) { "expired playback" }
+                pending[id] = result
+                Logger.d("mlhls resource request id=$id")
+                send(mapOf("sessionID" to 1, "type" to "unhandledURLRequest", "request" to mapOf(
+                    "FCUP_Response_ClientInfo" to 1, "FCUP_Response_ClientRef" to 40030004,
+                    "FCUP_Response_RequestID" to id, "FCUP_Response_URL" to url, "sessionID" to 1,
+                    "FCUP_Response_Headers" to mapOf("X-Playback-Session-Id" to session,
+                        "User-Agent" to "AppleCoreMedia/1.0.0.11B554a (Apple TV; U; CPU OS 7_0_4 like Mac OS X; en_us")
+                )))
+            }
+            check(result.latch.await(timeoutMs, TimeUnit.MILLISECONDS)) { "sender resource timeout" }
+            check(epoch == generation.get()) { "expired playback" }
+            return result.data ?: error("sender resource failed or cancelled")
         } finally { pending.remove(id) }
     }
 
@@ -92,14 +160,14 @@ internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
         future.latch.countDown()
     }
 
-    internal fun rewrite(url: String, text: String): String {
+    internal fun rewrite(url: String, text: String, epoch: Int = generation.get()): String {
         require(text.trimStart().startsWith("#EXTM3U"))
         var base: String? = null
         var prefix = ""
         var params = emptyList<String>()
         fun resolve(value: String): String {
             val absolute = URI(url).resolve(value).toString()
-            return if (absolute.startsWith("mlhls:")) local(absolute) else absolute
+            return if (absolute.startsWith("mlhls:")) local(absolute, epoch) else absolute
         }
         return text.lineSequence().map { line ->
             when {
@@ -121,6 +189,12 @@ internal class MlhlsRelay(private val send: (Map<String, Any?>) -> Unit) {
         }.joinToString("\n") + "\n"
     }
 
-    fun reset() { generation.incrementAndGet(); pending.values.forEach { it.latch.countDown() }; pending.clear() }
+    fun reset() = synchronized(requestLock) {
+        generation.incrementAndGet()
+        pending.values.forEach { it.latch.countDown() }
+        pending.clear()
+        prefetched.clear()
+        prefetchedChars = 0
+    }
     fun close() { closed = true; reset(); server.close(); worker.shutdownNow() }
 }

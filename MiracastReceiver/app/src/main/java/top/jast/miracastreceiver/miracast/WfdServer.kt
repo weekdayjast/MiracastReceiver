@@ -149,10 +149,17 @@ class WfdServer(
             onStreamStop = { onStreamStopped?.invoke() }
         }
         sessionHandler = handler
+        receiver.onVideoRecoveryRequested = {
+            scope.launch {
+                runCatching { handler.requestKeyFrame() }
+                    .onFailure { Timber.w(it, "WFD: keyframe request failed") }
+            }
+        }
 
         try {
             handler.handleSession()          // 阻塞直到会话结束
         } finally {
+            receiver.onVideoRecoveryRequested = null
             receiver.stop()
             rtpReceiver = null
             sessionHandler = null

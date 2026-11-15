@@ -53,6 +53,7 @@
     <string name="status_finished">Playback finished</string>
     <string name="status_playback_error">Playback error</string>
     <string name="error_playback_detail">Playback error: %s</string>
+    <string name="error_dlna_avc_decode">This TV could not decode the video. Try changing the video quality on the sending device and cast again.</string>
     <string name="error_unknown">Unknown error</string>
     <string name="status_speed">Playback speed: %s</string>
     <string name="status_quality">Quality: %s</string>
@@ -128,4 +129,6 @@
     <!-- Receiver status and AirPlay controls -->
     <string name="receiver_default_name">Living room TV</string>
     <string name="subtitles_follow_sender">Choose subtitles on the sending device.</string>
+    <string name="receiver_settings">Settings</string>
+    <string name="receiver_home_title">Casting receiver</string>
 </resources>

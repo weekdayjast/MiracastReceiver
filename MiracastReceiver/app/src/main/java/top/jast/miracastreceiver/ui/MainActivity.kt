@@ -13,7 +13,7 @@ import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
+import android.view.KeyEvent
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -23,7 +23,6 @@ import top.jast.miracastreceiver.discovery.MdnsAdvertiser
 import top.jast.miracastreceiver.service.CastReceiverService
 import top.jast.miracastreceiver.service.ReceiverStatus
 import top.jast.miracastreceiver.castplus.CastPlusReceiver
-import top.jast.miracastreceiver.util.AppLanguage
 import top.jast.miracastreceiver.util.AppSettings
 import top.jast.miracastreceiver.utils.NetworkUtils
 import kotlinx.coroutines.delay
@@ -45,9 +44,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvStatus: TextView
     private lateinit var tvMiracastStatus: TextView
     private lateinit var startupProgress: ProgressBar
-    private lateinit var switchAutoStart: SwitchCompat
-    private lateinit var switchReturnToApp: SwitchCompat
-    private lateinit var tvLanguageValue: TextView
+    private lateinit var settingsMenu: ReceiverSettingsMenu
     private lateinit var deviceNameDialog: DeviceNameDialog
     private val nameListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         if (key == AppSettings.KEY_RECEIVER_NAME) {
@@ -190,42 +187,14 @@ class MainActivity : AppCompatActivity() {
         tvDeviceName = findViewById(R.id.tv_device_name)
         tvDeviceIp = findViewById(R.id.tv_device_ip)
         tvStatus = findViewById(R.id.tv_status)
-        findViewById<SwitchCompat>(R.id.switch_castplus).apply {
-            isChecked = AppSettings.isCastPlusEnabled(this@MainActivity)
-            isEnabled = Build.VERSION.SDK_INT >= 23
-            setOnCheckedChangeListener { _, checked ->
-                AppSettings.setCastPlusEnabled(this@MainActivity, checked)
-                if (checked) requestWifiDirectPermissions()
-                startCastService()
-            }
-        }
         tvMiracastStatus = findViewById(R.id.tv_miracast_status)
         startupProgress = findViewById(R.id.startup_progress)
-        switchAutoStart = findViewById(R.id.switch_auto_start)
-        findViewById<SwitchCompat>(R.id.switch_auto_rotate).apply {
-            isChecked = AppSettings.isAutoRotateToFit(this@MainActivity)
-            setOnCheckedChangeListener { _, checked -> AppSettings.setAutoRotateToFit(this@MainActivity, checked) }
+        val gear = findViewById<View>(R.id.button_settings)
+        settingsMenu = ReceiverSettingsMenu(this, gear) { enabled ->
+            if (enabled) requestWifiDirectPermissions()
+            startCastService()
         }
-        switchReturnToApp = findViewById(R.id.switch_return_to_app)
-        tvLanguageValue = findViewById(R.id.tv_language_value)
-
-        // 开机自启开关
-        switchAutoStart.isChecked = AppSettings.isAutoStartOnBoot(this)
-        switchAutoStart.setOnCheckedChangeListener { _, isChecked ->
-            AppSettings.setAutoStartOnBoot(this, isChecked)
-            Timber.i("Auto start on boot set to $isChecked")
-        }
-
-        // 投屏结束后是否留在本应用
-        switchReturnToApp.isChecked = AppSettings.isReturnToAppAfterCast(this)
-        switchReturnToApp.setOnCheckedChangeListener { _, isChecked ->
-            AppSettings.setReturnToAppAfterCast(this, isChecked)
-            Timber.i("Return to app after cast set to $isChecked")
-        }
-
-        // 界面语言
-        findViewById<View>(R.id.setting_language).setOnClickListener { showLanguageDialog() }
-        tvLanguageValue.text = currentLanguageLabel()
+        gear.setOnClickListener { settingsMenu.toggle() }
 
         // 设置设备名称
         val deviceName = deviceInfoProvider.getDeviceName()
@@ -234,27 +203,12 @@ class MainActivity : AppCompatActivity() {
         tvDeviceName.setOnClickListener { deviceNameDialog.show() }
     }
 
-    /** 第一项是「跟随系统」，其后是 [AppLanguage.OPTIONS]。 */
-    private fun languageLabels(): Array<String> =
-        arrayOf(getString(R.string.language_follow_system)) + AppLanguage.OPTIONS.map { it.second }
-
-    private fun currentLanguageIndex(): Int = AppLanguage.currentIndex() + 1
-
-    private fun currentLanguageLabel(): String = languageLabels()[currentLanguageIndex()]
-
-    private fun showLanguageDialog() {
-        val checked = currentLanguageIndex()
-        AlertDialog.Builder(this)
-            .setTitle(R.string.language)
-            .setSingleChoiceItems(languageLabels(), checked) { dialog, which ->
-                dialog.dismiss()
-                if (which == checked) return@setSingleChoiceItems
-                val tag = if (which == 0) "" else AppLanguage.OPTIONS[which - 1].first
-                Timber.i("Switching app language to '${tag.ifEmpty { "system" }}'")
-                // 会重建当前页面，新页面直接用新语言
-                AppLanguage.apply(this, tag)
-            }
-            .show()
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_SETTINGS) {
+            settingsMenu.toggle()
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     private fun checkNetworkAndStart() {
@@ -357,6 +311,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onStop() {
+        settingsMenu.close()
         deviceNameDialog.close()
         super.onStop()
     }

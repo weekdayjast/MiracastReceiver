@@ -2,6 +2,7 @@ package top.jast.miracastreceiver.dlna
 
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import top.jast.miracastreceiver.ui.PlayerActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -11,8 +12,12 @@ import timber.log.Timber
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.io.OutputStream
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.URI
+import java.util.TreeMap
+import java.util.UUID
 
 /**
  * UPnP HTTP 服务器
@@ -31,6 +36,10 @@ class UpnpHttpServer(
     private var serverSocket: ServerSocket? = null
     private var serverJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private class EventSubscription(val callback: URI, val service: String, var expiresAt: Long) {
+        var nextSequence = 0L
+    }
+    private val subscriptions = mutableMapOf<String, EventSubscription>()
 
     fun start() {
         if (serverJob?.isActive == true) {
@@ -58,6 +67,7 @@ class UpnpHttpServer(
     }
 
     fun stop() {
+        synchronized(subscriptions) { subscriptions.clear() }
         try {
             serverJob?.cancel()
             serverSocket?.close()
@@ -74,7 +84,7 @@ class UpnpHttpServer(
                 val output = client.getOutputStream()
 
                 val requestLine = reader.readLine() ?: return
-                val headers = mutableMapOf<String, String>()
+                val headers = TreeMap<String, String>(String.CASE_INSENSITIVE_ORDER)
                 var contentLength = 0
 
                 var line: String?
@@ -107,7 +117,7 @@ class UpnpHttpServer(
                     val method = parts[0]
                     val path = parts[1]
 
-                    Timber.d("UPnP $method $path")
+                    Timber.d("UPnP $method $path from ${socket.inetAddress.hostAddress}")
 
                     when {
                         path == "/device.xml" -> sendDeviceDescription(output)
@@ -117,6 +127,8 @@ class UpnpHttpServer(
                         path == "/control/AVTransport" -> handleAvTransportControl(output, body, headers)
                         path == "/control/RenderingControl" -> handleRenderingControl(output, body, headers)
                         path == "/control/ConnectionManager" -> handleConnectionManager(output, body, headers)
+                        path == "/event/AVTransport" || path == "/event/RenderingControl" ->
+                            handleSubscription(client, method, path.substringAfterLast('/'), headers)
                         path.startsWith("/event/") -> handleEvent(output)
                         else -> sendNotFound(output)
                     }
@@ -320,7 +332,7 @@ class UpnpHttpServer(
             "GetProtocolInfo" -> {
                 val content = """
                     <Source></Source>
-                    <Sink>http-get:*:video/*:*,http-get:*:audio/*:*,http-get:*:image/*:*</Sink>
+                    <Sink>http-get:*:image/jpeg:*,http-get:*:image/png:*,http-get:*:video/mp4:*,http-get:*:video/*:*,http-get:*:audio/*:*,http-get:*:image/*:*</Sink>
                 """.trimIndent()
                 buildSoapResponse(action, content, "ConnectionManager")
             }
@@ -354,6 +366,105 @@ class UpnpHttpServer(
 
     private fun soapAction(headers: Map<String, String>): String =
         SoapParser.extractAction(headers.entries.firstOrNull { it.key.equals("SOAPAction", ignoreCase = true) }?.value)
+
+    private fun handleSubscription(client: Socket, method: String, service: String, headers: Map<String, String>) {
+        val peer = client.inetAddress.hostAddress
+        val sid = headers["SID"]
+        val callback = headers["CALLBACK"]?.let { value ->
+            Regex("<([^>]+)>").findAll(value).mapNotNull { match ->
+                runCatching { URI(match.groupValues[1]) }.getOrNull()
+            }.firstOrNull { it.scheme == "http" && it.host == peer && it.userInfo == null && it.fragment == null }
+        }
+        val timeout = headers["TIMEOUT"]?.substringAfter('-')?.toLongOrNull()?.coerceIn(1, 1800) ?: 1800L
+        val now = SystemClock.elapsedRealtime()
+        val expiresAt = now + timeout * 1000
+        val activeSid = synchronized(subscriptions) {
+            subscriptions.entries.removeAll { it.value.expiresAt <= now }
+            val existing = subscriptions[sid]?.takeIf { it.callback.host == peer && it.service == service }
+            when {
+                method == "UNSUBSCRIBE" && existing != null -> sid.also { subscriptions.remove(it) }
+                method == "SUBSCRIBE" && existing != null -> sid.also { existing.expiresAt = expiresAt }
+                method == "SUBSCRIBE" && sid == null && callback != null &&
+                    headers["NT"].equals("upnp:event", true) && subscriptions.size < 128 -> {
+                    "uuid:${UUID.randomUUID()}".also { subscriptions[it] = EventSubscription(callback, service, expiresAt) }
+                }
+                else -> null
+            }
+        }
+        val response = when {
+            activeSid == null -> "HTTP/1.1 412 Precondition Failed\r\n"
+            method == "UNSUBSCRIBE" -> "HTTP/1.1 200 OK\r\n"
+            else -> "HTTP/1.1 200 OK\r\nSID: $activeSid\r\nTIMEOUT: Second-$timeout\r\n"
+        }
+        client.getOutputStream().apply {
+            write((response + "Content-Length: 0\r\nConnection: close\r\n\r\n").toByteArray())
+            flush()
+        }
+        client.close()
+        if (activeSid != null && sid == null && callback != null) {
+            val subscription = synchronized(subscriptions) { subscriptions[activeSid] } ?: return
+            synchronized(subscription) { sendEvent(activeSid, subscription) }
+        }
+    }
+
+    fun notifyAvTransportChanged() {
+        val active = synchronized(subscriptions) {
+            subscriptions.filterValues { it.service == "AVTransport" && it.expiresAt > SystemClock.elapsedRealtime() }
+        }
+        for ((sid, subscription) in active) {
+            scope.launch {
+                synchronized(subscription) {
+                    val stillSubscribed = synchronized(subscriptions) {
+                        subscriptions[sid] === subscription && subscription.expiresAt > SystemClock.elapsedRealtime()
+                    }
+                    if (stillSubscribed && subscription.nextSequence != 0L) sendEvent(sid, subscription)
+                }
+            }
+        }
+    }
+
+    private fun sendEvent(sid: String, subscription: EventSubscription) {
+        val callback = subscription.callback
+        val service = subscription.service
+        val sequence = subscription.nextSequence
+        subscription.nextSequence = if (sequence == 0xFFFF_FFFFL) 1L else sequence + 1
+        val state = renderer.getState()
+        val (namespace, properties) = if (service == "AVTransport") {
+            val uri = SoapParser.escapeXml(SoapParser.escapeXml(state.uri))
+            val metadata = SoapParser.escapeXml(SoapParser.escapeXml(state.metadata))
+            "AVT" to ("&lt;TransportState val=&quot;${state.transportState.name}&quot;/&gt;" +
+                "&lt;TransportStatus val=&quot;OK&quot;/&gt;" +
+                "&lt;AVTransportURI val=&quot;$uri&quot;/&gt;" +
+                "&lt;AVTransportURIMetaData val=&quot;$metadata&quot;/&gt;" +
+                "&lt;CurrentTrackURI val=&quot;$uri&quot;/&gt;")
+        } else {
+            val mute = if (state.muted) 1 else 0
+            "RCS" to ("&lt;Volume channel=&quot;Master&quot; val=&quot;${state.volume}&quot;/&gt;" +
+                "&lt;Mute channel=&quot;Master&quot; val=&quot;$mute&quot;/&gt;")
+        }
+        val lastChange = "&lt;Event xmlns=&quot;urn:schemas-upnp-org:metadata-1-0/$namespace/&quot;&gt;" +
+            "&lt;InstanceID val=&quot;0&quot;&gt;$properties&lt;/InstanceID&gt;&lt;/Event&gt;"
+        val body = ("<e:propertyset xmlns:e=\"urn:schemas-upnp-org:event-1-0\">" +
+            "<e:property><LastChange>$lastChange</LastChange></e:property></e:propertyset>").toByteArray()
+        val path = callback.rawPath.ifEmpty { "/" } + (callback.rawQuery?.let { "?$it" } ?: "")
+        val port = if (callback.port == -1) 80 else callback.port
+        val headers = "NOTIFY $path HTTP/1.1\r\nHOST: ${callback.host}:$port\r\n" +
+            "CONTENT-TYPE: text/xml; charset=\"utf-8\"\r\nNT: upnp:event\r\nNTS: upnp:propchange\r\n" +
+            "SID: $sid\r\nSEQ: $sequence\r\nCONTENT-LENGTH: ${body.size}\r\nConnection: close\r\n\r\n"
+        runCatching {
+            Socket().use { socket ->
+                socket.connect(InetSocketAddress(callback.host, port), 2000)
+                socket.soTimeout = 2000
+                socket.getOutputStream().apply {
+                    write(headers.toByteArray())
+                    write(body)
+                    flush()
+                }
+                val status = socket.getInputStream().bufferedReader().readLine()
+                Timber.d("$service event $sequence to ${callback.host}: $status")
+            }
+        }.onFailure { Timber.d(it, "$service event $sequence failed for ${callback.host}") }
+    }
 
     private fun buildSoapResponse(action: String, content: String, service: String = "AVTransport"): String {
         return """<?xml version="1.0" encoding="utf-8"?>

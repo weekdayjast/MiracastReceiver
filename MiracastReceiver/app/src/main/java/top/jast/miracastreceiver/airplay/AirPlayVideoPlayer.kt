@@ -2,6 +2,7 @@
 
 import android.media.AudioAttributes
 import android.media.MediaPlayer
+import android.content.Context
 import android.view.Surface
 import top.jast.miracastreceiver.util.Logger
 
@@ -11,6 +12,8 @@ data class PlaybackInfo(
     val positionSec: Double,
     val rate: Double,        // 0.0 = paused, 1.0 = playing
     val readyToPlay: Boolean,
+    val bufferedPositionSec: Double? = null,
+    val buffering: Boolean = false,
 )
 
 /**
@@ -25,6 +28,7 @@ data class PlaybackInfo(
  * callbacks fire on its own thread.
  */
 class AirPlayVideoPlayer(
+    private val context: Context,
     private val surfaceProvider: () -> Surface?,
     private val onEnded: () -> Unit = {},
     /** Playback could not start or broke (bad URL, 403, unsupported format). Fired once per play(). */
@@ -33,6 +37,7 @@ class AirPlayVideoPlayer(
     private val onPlaying: () -> Unit = {},
 ) {
     private var mp: MediaPlayer? = null
+    private var hls: AirPlayHlsPlayer? = null
     @Volatile private var prepared = false
     @Volatile private var startFraction = 0.0
     @Volatile private var startSeconds: Double? = null
@@ -50,8 +55,14 @@ class AirPlayVideoPlayer(
      * [startPositionFraction] (0..1 of duration).
      */
     @Synchronized
-    fun play(url: String, startPositionFraction: Double, startPositionSeconds: Double? = null) {
+    fun play(url: String, startPositionFraction: Double, startPositionSeconds: Double?, youtubeMlhls: Boolean) {
         release()
+        if (MlhlsRelay.isManifestUrl(url)) {
+            hls = AirPlayHlsPlayer(context, surfaceProvider, onEnded, onFailed, onPlaying, youtubeMlhls).also {
+                it.play(url, startPositionFraction, startPositionSeconds)
+            }
+            return
+        }
         startFraction = startPositionFraction.coerceIn(0.0, 1.0)
         startSeconds = startPositionSeconds?.takeIf { it > 0.0 }
         pendingRate = 1f
@@ -126,6 +137,7 @@ class AirPlayVideoPlayer(
     /** rate ≤ 0 pauses, > 0 resumes. */
     @Synchronized
     fun setRate(rate: Float) {
+        hls?.let { it.setRate(rate); return }
         val player = mp ?: return
         if (!prepared) { pendingRate = rate; return }
         if (completed && rate > 0f) {
@@ -141,6 +153,7 @@ class AirPlayVideoPlayer(
     /** Seeks to [positionSec] seconds. */
     @Synchronized
     fun scrub(positionSec: Double) {
+        hls?.let { it.scrub(positionSec); return }
         if (mp != null && !prepared) { pendingSeekSec = positionSec; return }
         val player = mp ?: return
         // 跳回结尾之前的位置 = 发送端要重播/继续，此后的 /rate=1 才真正开始播放
@@ -151,6 +164,7 @@ class AirPlayVideoPlayer(
     /** Current playback snapshot for `/playback-info`, or null if nothing is loaded. */
     @Synchronized
     fun info(): PlaybackInfo? {
+        hls?.let { return it.info() }
         val player = mp ?: return null
         if (!prepared) return PlaybackInfo(0.0, 0.0, 0.0, readyToPlay = false)
         val dur = runCatching { player.duration }.getOrDefault(0)
@@ -163,11 +177,14 @@ class AirPlayVideoPlayer(
     /** Re-attach the streaming surface (after the Activity recreates it on foreground). */
     @Synchronized
     fun attachSurface() {
+        hls?.let { it.attachSurface(); return }
         surfaceProvider()?.let { runCatching { mp?.setSurface(it) } }
     }
 
     @Synchronized
     fun release() {
+        hls?.release()
+        hls = null
         mp?.let { p -> runCatching { p.stop() }; runCatching { p.release() } }
         mp = null
         prepared = false

@@ -318,6 +318,7 @@ internal class UxPlayReceiver(
                 return@post
             }
             player = AirPlayVideoPlayer(
+                context = context,
                 surfaceProvider = surfaceProvider,
                 onEnded = { onMediaEnded() },
                 onFailed = { reason ->
@@ -327,7 +328,7 @@ internal class UxPlayReceiver(
                     } else stopVideo()
                 },
                 onPlaying = {},
-            ).also { it.play(location, 0.0, startPositionSeconds.toDouble()) }
+            ).also { it.play(location, 0.0, startPositionSeconds.toDouble(), youtubeMlhls = false) }
             Logger.i("UxPlay media playback via MediaPlayer at $startPositionSeconds seconds")
         }
     }

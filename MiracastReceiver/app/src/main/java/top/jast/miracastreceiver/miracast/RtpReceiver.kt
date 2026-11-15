@@ -4,6 +4,7 @@ import android.view.Surface
 import kotlinx.coroutines.*
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.CountDownLatch
 import timber.log.Timber
 import java.net.DatagramPacket
 import java.net.DatagramSocket
@@ -28,19 +29,20 @@ class RtpReceiver(
     private val surfaceProvider: () -> Surface?
 ) {
 
-    private var socket: DatagramSocket? = null
+    @Volatile private var socket: DatagramSocket? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     @Volatile
     private var isRunning = false
 
-    private val renderer = MiracastVideoRenderer(surfaceProvider)
+    @Volatile var onVideoRecoveryRequested: (() -> Unit)? = null
+    private val renderer = MiracastVideoRenderer(surfaceProvider) { onVideoRecoveryRequested?.invoke() }
     private val audioPlayer = MiracastAudioPlayer()
     private val demuxer = TsDemuxer(
         onAccessUnit = renderer::onAccessUnit,
         onDiscontinuity = renderer::onDiscontinuity,
         // 和视频保持一致：播放页不在前台（没有 Surface）时不出声
-        onAudioPes = { codec, data -> if (surfaceProvider() != null) audioPlayer.onAudioPes(codec, data) },
+        onAudioPes = { codec, data, pts -> if (surfaceProvider() != null) audioPlayer.onAudioPes(codec, data, pts) },
         onAudioDiscontinuity = audioPlayer::onDiscontinuity
     )
 
@@ -49,9 +51,13 @@ class RtpReceiver(
      *
      * 不能在接收线程上直接解码：MediaCodec 一旦卡顿就会反压到 UDP 接收，内核缓冲区溢出
      * 丢包，而丢包必然花屏。这里让接收线程只做「收包 + 入队」，保证它永远跑得飞快。
-     * 队列很浅（实时流不需要深队列），满了就丢最旧的并通知解码器等下一个关键帧。
+     * 有限缓冲吸收短暂的解码停顿。真正溢出后由消费线程按 RTP 序号定位缺口，
+     * 接收线程不能跨线程修改解码器或正在拼装的 PES。
      */
-    private val payloadQueue = ArrayBlockingQueue<ByteArray>(256)
+    private data class Payload(val sequence: Int, val data: ByteArray, val arrivedMs: Long)
+    private val payloadQueue = ArrayBlockingQueue<Payload>(256)
+    private val decoderStopped = CountDownLatch(1)
+    @Volatile private var queueDrops = 0L
 
     @Volatile
     var packetsLost = 0L
@@ -74,35 +80,36 @@ class RtpReceiver(
         var active: RtpReceiver? = null
     }
 
-    fun start() {
+    @Synchronized fun start() {
         if (isRunning) {
             Timber.w("RTP Receiver already running")
             return
         }
 
         active = this
+        isRunning = true
 
         scope.launch { runDecoder() }
 
         scope.launch {
             try {
-                socket = DatagramSocket(port).apply {
+                val receivingSocket = DatagramSocket(port).apply {
                     // 默认接收缓冲只有几十 KB，2.5Mbps 的流稍有调度延迟就会溢出丢包
                     runCatching { receiveBufferSize = 1024 * 1024 }
                 }
-                isRunning = true
+                socket = receivingSocket
+                if (!isRunning) { receivingSocket.close(); return@launch }
                 Timber.i("RTP Receiver listening on UDP $port (expecting MPEG-2 TS, PT=33), " +
                     "recvBuf=${socket?.receiveBufferSize}")
 
                 val buffer = ByteArray(65536)
                 val packet = DatagramPacket(buffer, buffer.size)
                 var loggedFirst = false
-                var expectedSeq = -1
 
                 while (isRunning) {
                     try {
                         packet.length = buffer.size    // receive() 会缩短 length，每次要复位
-                        socket?.receive(packet)
+                        receivingSocket.receive(packet)
                         if (packet.length <= 0) continue
 
                         packetsReceived++
@@ -110,6 +117,12 @@ class RtpReceiver(
 
                         val payloadOffset = rtpHeaderLength(packet.data, packet.length)
                         if (payloadOffset <= 0 || payloadOffset >= packet.length) continue
+                        if ((packet.data[1].toInt() and 0x7f) != 33) continue
+                        val padding = if ((packet.data[0].toInt() and 0x20) != 0)
+                            packet.data[packet.length - 1].toInt() and 0xff else 0
+                        if ((packet.data[0].toInt() and 0x20) != 0 && padding == 0) continue
+                        val payloadEnd = packet.length - padding
+                        if (payloadEnd <= payloadOffset) continue
 
                         if (!loggedFirst) {
                             loggedFirst = true
@@ -118,30 +131,15 @@ class RtpReceiver(
                                 "payload=${packet.length - payloadOffset}B")
                         }
 
-                        // RTP 序号跳变 = 网络丢包，残缺的帧不能喂给解码器
                         val seq = ((packet.data[2].toInt() and 0xFF) shl 8) or
                             (packet.data[3].toInt() and 0xFF)
-                        if (expectedSeq >= 0 && seq != expectedSeq) {
-                            val lost = (seq - expectedSeq + 0x10000) and 0xFFFF
-                            packetsLost += lost
-                            Timber.w("RTP: lost $lost packets (seq $expectedSeq → $seq)")
-                            renderer.onDiscontinuity()
-                            audioPlayer.onDiscontinuity()
-                        }
-                        expectedSeq = (seq + 1) and 0xFFFF
-
-                        // 接收线程只入队，解复用和解码在另一条线程上做
-                        val payload = packet.data.copyOfRange(payloadOffset, packet.length)
-                        if (!payloadQueue.offer(payload)) {
-                            payloadQueue.poll()
-                            payloadQueue.offer(payload)
-                            renderer.onDiscontinuity()
-                            audioPlayer.onDiscontinuity()
-                        }
+                        val payload = Payload(seq, packet.data.copyOfRange(payloadOffset, payloadEnd),
+                            android.os.SystemClock.elapsedRealtime())
+                        if (!payloadQueue.offer(payload)) queueDrops++
 
                         if (packetsReceived % 1000L == 0L) {
                             Timber.i("RTP stats: $packetsReceived packets, ${bytesReceived / 1024}KB, " +
-                                "lost=$packetsLost, queue=${payloadQueue.size}")
+                                "lost=$packetsLost, queue=${payloadQueue.size}, queueDrops=$queueDrops")
                         }
                     } catch (e: Exception) {
                         if (isRunning) Timber.e(e, "Error receiving RTP packet")
@@ -151,22 +149,42 @@ class RtpReceiver(
                 Timber.e(e, "Failed to start RTP Receiver")
                 onError?.invoke("RTP 接收启动失败: ${e.message}")
                 isRunning = false
+                scope.cancel()
+            } finally {
+                socket?.close()
             }
         }
     }
 
     /** 解码线程：从队列取 TS 负载做解复用，解出的访问单元由 renderer 送进 MediaCodec。 */
-    private suspend fun runDecoder() {
-        while (scope.isActive) {
-            val payload = withContext(Dispatchers.IO) {
-                payloadQueue.poll(200, TimeUnit.MILLISECONDS)
-            } ?: continue
-            try {
-                demuxer.feed(payload, 0, payload.size)
-            } catch (e: Exception) {
-                Timber.e(e, "Error demuxing TS payload")
-                renderer.onDiscontinuity()
+    private fun runDecoder() {
+        val reorder = RtpReorderBuffer(
+            onPayload = { demuxer.feed(it, 0, it.size) },
+            onGap = { lost ->
+                packetsLost += lost
+                Timber.w("RTP: confirmed gap=%d, lost=%d, queueDrops=%d", lost, packetsLost, queueDrops)
+                // One lost RTP packet may contain audio/null TS only. Let each PID's
+                // TS continuity counter decide which stream actually needs recovery.
+            })
+        try {
+            while (scope.isActive && isRunning) {
+                try {
+                    val payload = payloadQueue.poll(20, TimeUnit.MILLISECONDS)
+                    if (payload != null) reorder.offer(payload.sequence, payload.data, payload.arrivedMs)
+                    else reorder.drain(android.os.SystemClock.elapsedRealtime())
+                } catch (e: Exception) {
+                    if (isRunning) Timber.e(e, "Error demuxing TS payload")
+                    demuxer.onTransportDiscontinuity()
+                }
             }
+        } finally {
+            try {
+                renderer.release()
+                audioPlayer.release()
+                demuxer.reset()
+                Timber.i("RTP decode stopped: lost=%d, queueDrops=%d, lateOrDuplicate=%d",
+                    packetsLost, queueDrops, reorder.ignoredPackets)
+            } finally { decoderStopped.countDown() }
         }
     }
 
@@ -194,10 +212,11 @@ class RtpReceiver(
 
     fun stop() {
         isRunning = false
+        renderer.requestStop()
+        socket?.close()
         scope.cancel()
-        renderer.release()
         audioPlayer.release()
-        demuxer.reset()
+        if (!decoderStopped.await(1, TimeUnit.SECONDS)) Timber.w("RTP decoder shutdown still pending")
         if (active === this) active = null
 
         try {

@@ -60,7 +60,8 @@ open class RtspHandler(
     private val onArtwork: (ByteArray) -> Unit = {},
     /** AirPlay video URL mode: POST /play with a media URL + start fraction (0..1). */
     /** startSeconds 优先于 startFraction（iOS 新版只发 Start-Position-Seconds）。 */
-    private val onVideoPlay: (url: String, startFraction: Double, startSeconds: Double?) -> Unit = { _, _, _ -> },
+    private val onVideoPlay: (url: String, startFraction: Double, startSeconds: Double?, youtubeMlhls: Boolean) -> Unit =
+        { _, _, _, _ -> },
     /** AirPlay video transport: POST /rate (≤0 pause, >0 resume). */
     private val onVideoRate: (rate: Float) -> Unit = {},
     /** AirPlay video transport: POST /scrub — seek to position (seconds). */
@@ -352,6 +353,7 @@ open class RtspHandler(
                     else                -> routeSideRequest(request, path)
                 }
                 sendResponse(output, response, cseq)
+                if (response.disconnect) break
             }
         } catch (e: Exception) {
             if (running) Logger.w("Side connection ($remote) error: ${e.message}")
@@ -370,6 +372,14 @@ open class RtspHandler(
         "POST /rate"          -> handleVideoRate(request)
         "POST /scrub"         -> handleVideoScrubPost(request)
         "POST /stop"          -> handleVideoStop(request)
+        "POST /getProperty"   -> when (request.uri.substringAfter('?', "")) {
+            "playbackErrorLog", "playbackAccessLog", "selectedMediaArray" -> {
+                // Like UxPlay, acknowledge the query with an empty response when no data is available.
+                Logger.d("AirPlay property query acknowledged: ${request.uri.substringAfter('?')}")
+                RtspResponse(200, "OK", protocol = request.responseProtocol())
+            }
+            else -> handleUnknownInternal(request)
+        }
         // Playlist / property side-channel of AirPlay video — acknowledge so the sender proceeds.
         "PUT /setProperty", "POST /setProperty" -> {
             // 与 UxPlay 一致：已知的 HLS 属性（selectedMediaArray、isInterestedInDateRange 等）
@@ -430,6 +440,14 @@ open class RtspHandler(
     private val mlhlsRelayDelegate = lazy { MlhlsRelay { sendReverseEvent(it) } }
     private val mlhlsRelay by mlhlsRelayDelegate
     @Volatile private var videoItemUuid: String? = null
+    @Volatile private var youtubeMlhlsPlayback = false
+    @Volatile private var youtubeMlhlsStopped = false
+
+    fun markYouTubePlaybackStopped(): Boolean {
+        if (!youtubeMlhlsPlayback) return false
+        youtubeMlhlsStopped = true
+        return true
+    }
 
     private fun sendReverseEvent(values: Map<String, Any?>) {
         eventExecutor.execute {
@@ -447,6 +465,11 @@ open class RtspHandler(
     }
 
     fun sendVideoEvent(state: String) {
+        // UxPlay's YouTube HLS path uses /playback-info for player state and /reverse for FCUP.
+        if (youtubeMlhlsPlayback) {
+            Logger.d("YouTube mlhls: reporting $state through playback-info polling")
+            return
+        }
         runCatching {
             eventExecutor.execute {
                 synchronized(reverseLock) {
@@ -568,15 +591,18 @@ open class RtspHandler(
             return RtspResponse(400, "Bad Request", protocol = request.responseProtocol())
         }
         // iOS 镜像中全屏切换时只带 Start-Position-Seconds（手机当前已播到的秒数），没有比例值
-        val startSeconds = if (request.isPlistBody()) {
-            runCatching { PlistCodec.decode(request.bodyBytes)["Start-Position-Seconds"] as? Double }.getOrNull()
+        val playProperties = if (request.isPlistBody()) {
+            runCatching { PlistCodec.decode(request.bodyBytes) }.getOrNull()
         } else null
-        videoItemUuid = if (request.isPlistBody()) runCatching { PlistCodec.decode(request.bodyBytes)["uuid"] as? String }.getOrNull() else null
+        val startSeconds = playProperties?.get("Start-Position-Seconds") as? Double
         val playbackUrl = if (scheme == "mlhls") {
             if (!url.startsWith("mlhls://localhost/")) return RtspResponse(400, "Bad Request", protocol = request.responseProtocol())
             mlhlsRelay.play(url, request.header("X-Apple-Session-ID") ?: reverseSessionId ?: "")
         } else url
-        onVideoPlay(playbackUrl, start, startSeconds)
+        videoItemUuid = playProperties?.get("uuid") as? String
+        youtubeMlhlsPlayback = scheme == "mlhls" && playProperties?.get("clientBundleID") == "com.google.ios.youtube"
+        youtubeMlhlsStopped = false
+        onVideoPlay(playbackUrl, start, startSeconds, youtubeMlhlsPlayback)
         return RtspResponse(200, "OK", protocol = request.responseProtocol())
     }
 
@@ -627,6 +653,7 @@ open class RtspHandler(
     /** POST /stop — stop URL playback. */
     private fun handleVideoStop(request: RtspRequest): RtspResponse {
         Logger.i("POST /stop (video URL)")
+        markYouTubePlaybackStopped()
         if (mlhlsRelayDelegate.isInitialized()) mlhlsRelay.reset()
         onVideoStop()
         return RtspResponse(200, "OK", protocol = request.responseProtocol())
@@ -634,23 +661,46 @@ open class RtspHandler(
 
     /** GET /playback-info — XML plist describing current position/duration/rate/ready state. */
     private fun handlePlaybackInfo(request: RtspRequest): RtspResponse {
+        if (youtubeMlhlsStopped && request.responseProtocol().startsWith("HTTP")) {
+            Logger.d("AirPlay playback-info response: stopped, closing old video control connection")
+            return RtspResponse(200, "OK", protocol = request.responseProtocol(), disconnect = true)
+        }
         val info = onPlaybackInfo()
-        val plist: Map<String, Any?> = if (info == null || !info.readyToPlay) {
+        val plist: Map<String, Any?> = if (youtubeMlhlsPlayback) {
+            val duration = info?.durationSec ?: 0.0
+            val position = info?.positionSec ?: 0.0
+            // Match UxPlay's YouTube response, including its full timeline while loading.
+            mapOf(
+                "duration" to duration,
+                "position" to position,
+                "rate" to (info?.rate ?: 0.0),
+                "readyToPlay" to if (info?.readyToPlay == true) 1 else 0,
+                "playbackBufferEmpty" to 0,
+                "playbackBufferFull" to 1,
+                "playbackLikelyToKeepUp" to 1,
+                "loadedTimeRanges" to listOf(mapOf("start" to position, "duration" to (duration - position).coerceAtLeast(0.0))),
+                "seekableTimeRanges" to listOf(mapOf("start" to 0.0, "duration" to duration)),
+            )
+        } else if (info == null || !info.readyToPlay) {
             mapOf("readyToPlay" to false)
         } else {
             val ranges = listOf(mapOf("start" to 0.0, "duration" to info.durationSec))
+            val loadedRanges = info.bufferedPositionSec?.let { end ->
+                listOf(mapOf("start" to info.positionSec, "duration" to (end - info.positionSec).coerceAtLeast(0.0)))
+            } ?: ranges
             mapOf(
                 "duration" to info.durationSec,
                 "position" to info.positionSec,
                 "rate" to info.rate,
                 "readyToPlay" to true,
-                "playbackBufferEmpty" to false,
-                "playbackBufferFull" to true,
-                "playbackLikelyToKeepUp" to true,
-                "loadedTimeRanges" to ranges,
+                "playbackBufferEmpty" to (info.buffering && (info.bufferedPositionSec ?: 0.0) <= info.positionSec),
+                "playbackBufferFull" to !info.buffering,
+                "playbackLikelyToKeepUp" to !info.buffering,
+                "loadedTimeRanges" to loadedRanges,
                 "seekableTimeRanges" to ranges,
             )
         }
+        Logger.d("AirPlay playback-info response: $plist")
         return RtspResponse(
             200, "OK",
             bodyBytes = PlistCodec.encodeXml(plist),
@@ -661,6 +711,7 @@ open class RtspHandler(
 
     /** GET /server-info — legacy XML plist of receiver identity for AirPlay video senders. */
     private fun handleServerInfo(request: RtspRequest): RtspResponse {
+        val deviceId = top.jast.miracastreceiver.util.NetworkUtils.getAirPlayDeviceId(context)
         val info = mapOf(
             "deviceid" to top.jast.miracastreceiver.util.NetworkUtils.getAirPlayDeviceId(context),
             // 视频投送连接读这里的 features 决定是否先做 FairPlay：声明了 FairPlay 认证位时，iPhone
@@ -671,7 +722,9 @@ open class RtspHandler(
             "model" to "AppleTV5,3",
             "protovers" to "1.1",
             "srcvers" to "220.68",
+            "vv" to 2,
         )
+        Logger.d("AirPlay server-info response: $info")
         return RtspResponse(
             200, "OK",
             bodyBytes = PlistCodec.encodeXml(info),
@@ -1071,6 +1124,16 @@ open class RtspHandler(
             if (streamTypes.contains(110)) { onMirrorVideoStop(); activeStreamTypes.remove(110) }
             if (streamTypes.contains(103)) { onBufferedAudioStop(); activeStreamTypes.remove(103) }
             Logger.i("TEARDOWN streams=$streamTypes — session continues (active=$activeStreamTypes)")
+            if (streamTypes.size == 1 && streamTypes[0] == 96 && activeStreamTypes.isEmpty()) {
+                // The sender can tear audio down before opening its HLS /play connection.
+                // UxPlay sends these headers while retaining the control connection.
+                Logger.d("AirPlay audio TEARDOWN: acknowledging with Connection: close")
+                return RtspResponse(
+                    200, "OK",
+                    headers = mapOf("Audio-Jack-Status" to "connected; type=digital", "Connection" to "close"),
+                    protocol = request.responseProtocol(),
+                )
+            }
             return RtspResponse(statusCode = 200, statusMessage = "OK", protocol = request.responseProtocol())
         } else {
             Logger.i("TEARDOWN (session, body=${request.bodyBytes.size}B) — streaming stopping")

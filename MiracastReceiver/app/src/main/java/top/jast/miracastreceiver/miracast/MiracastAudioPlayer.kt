@@ -13,6 +13,7 @@ import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Miracast 音频播放：把 [TsDemuxer] 解出的音频 PES 解码后写进 AudioTrack。
@@ -22,14 +23,15 @@ import java.util.concurrent.TimeUnit
  * - LPCM（stream_type 0x83）：PES 负载是 4 字节私有头 + 16 位大端 PCM，字节序翻转后直接播放
  *
  * 和视频一样走「收到即播」，不按 PTS 做音画同步：视频是收到即送显的，音频只要不积压，
- * 两者自然对齐。所以这里把队列压得很浅，积压超过阈值（源端时钟比电视快、或者解码卡顿）
- * 就丢掉旧数据追上实时，宁可短暂断音也不让声音越拖越晚。
+ * 临时网络突发由有限队列吸收，只有 PTS 确认积压超过 600ms 才追赶；
+ * 不能仅凭 PES 个数判断延迟，因为一个 PES 的时长和每批到达数量都不固定。
  *
  * 解码器和 AudioTrack 只在播放线程上创建、使用和释放，不跨线程碰 MediaCodec。
  */
 class MiracastAudioPlayer {
 
-    private val queue = ArrayBlockingQueue<Pair<TsDemuxer.AudioCodec, ByteArray>>(QUEUE_CAPACITY)
+    private data class AudioPes(val type: TsDemuxer.AudioCodec, val data: ByteArray, val ptsUs: Long)
+    private val queue = ArrayBlockingQueue<AudioPes>(QUEUE_CAPACITY)
 
     @Volatile
     private var running = false
@@ -51,15 +53,19 @@ class MiracastAudioPlayer {
     private var trackChannels = 0
     private val adts = ByteArrayOutputStream(16 * 1024)
     private var firstPcm = true
-    private var droppedPes = 0L
+    private val droppedPes = AtomicLong()
+    @Volatile private var receivedPes = 0L
+    @Volatile private var firstSourcePtsUs = 0L
+    @Volatile private var latestSourcePtsUs = 0L
+    @Volatile private var firstArrivalMs = 0L
+    private var decodedFrames = 0L
+    private var pcmDurationUs = 0L
+    private var inputTimeouts = 0L
+    private var lastStatsMs = 0L
 
     companion object {
         /** AAC 一帧 1024 样本，48kHz 下约 21ms；Windows 通常一个 PES 放一两帧 */
         private const val QUEUE_CAPACITY = 64
-
-        /** 积压超过这么多 PES 就认为落后了，丢到只剩 [QUEUE_KEEP] 个 */
-        private const val MAX_BACKLOG = 8
-        private const val QUEUE_KEEP = 2
 
         private val SAMPLE_RATES = intArrayOf(
             96000, 88200, 64000, 48000, 44100, 32000, 24000, 22050, 16000, 12000, 11025, 8000, 7350
@@ -67,14 +73,21 @@ class MiracastAudioPlayer {
     }
 
     /** [TsDemuxer] 的回调入口，运行在解复用线程上，只入队不做重活。 */
-    fun onAudioPes(codecType: TsDemuxer.AudioCodec, data: ByteArray) {
+    fun onAudioPes(codecType: TsDemuxer.AudioCodec, data: ByteArray, ptsUs: Long) {
         if (released) return
         if (!running) start()
-        val item = codecType to data
+        receivedPes++
+        if (firstArrivalMs == 0L) firstArrivalMs = android.os.SystemClock.elapsedRealtime()
+        if (ptsUs > 0) {
+            if (firstSourcePtsUs == 0L) firstSourcePtsUs = ptsUs
+            latestSourcePtsUs = ptsUs
+        }
+        val item = AudioPes(codecType, data, ptsUs)
         if (!queue.offer(item)) {
             queue.poll()
             queue.offer(item)
-            droppedPes++
+            droppedPes.incrementAndGet()
+            resyncRequested = true
         }
     }
 
@@ -102,37 +115,41 @@ class MiracastAudioPlayer {
         Timber.i("Miracast audio: playback thread started")
         try {
             while (running) {
-                val (type, data) = try {
+                var item = try {
                     queue.poll(200, TimeUnit.MILLISECONDS)
                 } catch (e: InterruptedException) {
                     null
                 } ?: continue
 
-                if (queue.size > MAX_BACKLOG) {
+                val stale = AudioBacklogPolicy.dropCount((listOf(item) + queue.toList()).map { it.ptsUs })
+                if (stale > 0) {
                     var dropped = 0
-                    while (queue.size > QUEUE_KEEP) {
-                        queue.poll()
+                    repeat(stale) {
+                        val next = queue.poll() ?: return@repeat
+                        item = next
                         dropped++
                     }
-                    droppedPes += dropped
+                    droppedPes.addAndGet(dropped.toLong())
                     resyncRequested = true
-                    Timber.w("Miracast audio: behind real time, dropped $dropped PES (total $droppedPes)")
+                    Timber.w("Miracast audio: PTS backlog exceeded 600ms, dropped %d PES (total %d)", dropped, droppedPes.get())
                 }
 
                 try {
-                    when (type) {
-                        TsDemuxer.AudioCodec.AAC_ADTS -> handleAac(data)
-                        TsDemuxer.AudioCodec.LPCM -> handleLpcm(data)
+                    when (item.type) {
+                        TsDemuxer.AudioCodec.AAC_ADTS -> handleAac(item.data)
+                        TsDemuxer.AudioCodec.LPCM -> handleLpcm(item.data)
                     }
+                    reportStats()
                 } catch (e: Exception) {
                     if (running) Timber.e(e, "Miracast audio: decode error")
                     releaseCodec()                       // 解码器出错后状态不可信，下一帧重建
+                    releaseTrack()
                 }
             }
         } finally {
             releaseCodec()
             releaseTrack()
-            Timber.i("Miracast audio: playback thread stopped, dropped $droppedPes PES")
+            Timber.i("Miracast audio: playback thread stopped, dropped %d PES", droppedPes.get())
         }
     }
 
@@ -204,14 +221,31 @@ class MiracastAudioPlayer {
 
     private fun decodeAacFrame(buf: ByteArray, offset: Int, length: Int) {
         val mc = codec ?: return
-        val inIdx = mc.dequeueInputBuffer(10_000)
-        if (inIdx >= 0) {
-            val inBuf = mc.getInputBuffer(inIdx)!!
-            inBuf.clear()
-            inBuf.put(buf, offset, length)
-            mc.queueInputBuffer(inIdx, 0, length, 0, 0)
+        val started = System.nanoTime()
+        while (running) {
+            val inIdx = mc.dequeueInputBuffer(10_000)
+            val accepted = inIdx >= 0
+            if (accepted) {
+                val inBuf = mc.getInputBuffer(inIdx)!!
+                inBuf.clear()
+                inBuf.put(buf, offset, length)
+                mc.queueInputBuffer(inIdx, 0, length, 0, 0)
+                decodedFrames++
+            }
+            // Drain PCM even if input is full, then retry the same AAC frame.
+            // Previously that frame was discarded before making room in the codec.
+            drainAacOutput(mc)
+            if (accepted) return
+            if (System.nanoTime() - started >= 500_000_000L) {
+                inputTimeouts++
+                resyncRequested = true
+                Timber.w("Miracast audio: decoder input stalled for 500ms")
+                return
+            }
         }
+    }
 
+    private fun drainAacOutput(mc: MediaCodec) {
         val info = MediaCodec.BufferInfo()
         while (true) {
             val outIdx = mc.dequeueOutputBuffer(info, 0)
@@ -321,12 +355,28 @@ class MiracastAudioPlayer {
             firstPcm = false
             Timber.i("Miracast audio: first PCM (${length}B) → AudioTrack")
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            track.write(pcm, 0, length, AudioTrack.WRITE_BLOCKING)
-        } else {
-            @Suppress("DEPRECATION")
-            track.write(pcm, 0, length)
+        var offset = 0
+        while (offset < length && running) {
+            val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                track.write(pcm, offset, length - offset, AudioTrack.WRITE_BLOCKING)
+            } else {
+                @Suppress("DEPRECATION")
+                track.write(pcm, offset, length - offset)
+            }
+            check(written > 0) { "AudioTrack.write failed: $written" }
+            offset += written
+            pcmDurationUs += written.toLong() * 1_000_000 / (trackSampleRate * trackChannels * 2)
         }
+    }
+
+    private fun reportStats() {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastStatsMs < 2_000) return
+        lastStatsMs = now
+        Timber.i("Miracast audio stats: pes=%d, aac=%d, pcmMs=%d, sourceMs=%d, wallMs=%d, q=%d, drops=%d, inputTimeouts=%d",
+            receivedPes, decodedFrames, pcmDurationUs / 1000,
+            (latestSourcePtsUs - firstSourcePtsUs) / 1000, now - firstArrivalMs,
+            queue.size, droppedPes.get(), inputTimeouts)
     }
 
     private fun releaseCodec() {

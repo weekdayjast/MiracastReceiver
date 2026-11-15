@@ -39,6 +39,9 @@ class SsdpServer(
     private var serverJob: Job? = null
     private var refreshJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO)
+    private val advertisedTargets = listOf(
+        "upnp:rootdevice", "uuid:$deviceUuid", DEVICE_TYPE, SERVICE_TYPE_AV, SERVICE_TYPE_RC, SERVICE_TYPE_CM
+    )
 
     fun start() {
         if (serverJob?.isActive == true) {
@@ -90,14 +93,14 @@ class SsdpServer(
     }
 
     private fun handleSearchRequest(message: String, address: InetAddress, port: Int) {
-        Timber.d("SSDP search from ${address.hostAddress}:$port")
-
-        // 检查搜索目标
-        val searchTarget = extractSearchTarget(message)
+        val searchTarget = extractSearchTarget(message) ?: return
+        Timber.d("SSDP search from ${address.hostAddress}:$port ST=$searchTarget")
+        if (searchTarget == "ssdp:all") {
+            advertisedTargets.forEach { sendSearchResponse(address, port, it) }
+            return
+        }
 
         val shouldRespond = when {
-            searchTarget == null -> false
-            searchTarget == "ssdp:all" -> true
             searchTarget == "upnp:rootdevice" -> true
             searchTarget.contains("MediaRenderer") -> true
             searchTarget.contains("AVTransport") -> true
@@ -108,7 +111,7 @@ class SsdpServer(
         }
 
         if (shouldRespond) {
-            sendSearchResponse(address, port, searchTarget ?: "upnp:rootdevice")
+            sendSearchResponse(address, port, searchTarget)
         }
     }
 
@@ -186,20 +189,11 @@ class SsdpServer(
     private fun sendNotify() {
         val location = "http://$localIp:$httpPort/device.xml"
 
-        val notifications = listOf(
-            "upnp:rootdevice",
-            "uuid:$deviceUuid",
-            DEVICE_TYPE,
-            SERVICE_TYPE_AV,
-            SERVICE_TYPE_RC,
-            SERVICE_TYPE_CM
-        )
-
         try {
             val socket = DatagramSocket()
             val group = InetAddress.getByName(SSDP_ADDRESS)
 
-            for (nt in notifications) {
+            for (nt in advertisedTargets) {
                 val message = buildString {
                     append("NOTIFY * HTTP/1.1\r\n")
                     append("HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n")
@@ -230,20 +224,11 @@ class SsdpServer(
     }
 
     private fun sendByebye() {
-        val notifications = listOf(
-            "upnp:rootdevice",
-            "uuid:$deviceUuid",
-            DEVICE_TYPE,
-            SERVICE_TYPE_AV,
-            SERVICE_TYPE_RC,
-            SERVICE_TYPE_CM
-        )
-
         try {
             val socket = DatagramSocket()
             val group = InetAddress.getByName(SSDP_ADDRESS)
 
-            for (nt in notifications) {
+            for (nt in advertisedTargets) {
                 val message = buildString {
                     append("NOTIFY * HTTP/1.1\r\n")
                     append("HOST: $SSDP_ADDRESS:$SSDP_PORT\r\n")

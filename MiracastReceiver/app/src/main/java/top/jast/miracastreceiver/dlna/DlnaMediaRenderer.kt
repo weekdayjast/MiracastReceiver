@@ -29,7 +29,11 @@ class DlnaMediaRenderer {
         var playbackSpeed: Float = 1f
     )
 
-    private val state = MediaState()
+    private var state = MediaState()
+    private var mediaSessionId = 0L
+
+    @Synchronized
+    fun getMediaSessionId(): Long = mediaSessionId
 
     var onSetUri: ((String, String) -> Unit)? = null
     var onPlay: (() -> Unit)? = null
@@ -41,7 +45,9 @@ class DlnaMediaRenderer {
     var onVolumeChanged: ((Int) -> Unit)? = null
     var onMuteChanged: ((Boolean) -> Unit)? = null
 
+    @Synchronized
     fun setAVTransportURI(uri: String, metadata: String) {
+        mediaSessionId++
         state.uri = decodeXmlEntities(uri)
         state.metadata = metadata
         state.playlist = parsePlaylist(state.uri, metadata)
@@ -66,7 +72,7 @@ class DlnaMediaRenderer {
     }
 
     fun stop() {
-        state.transportState = TransportState.STOPPED
+        setStopped()
         Timber.i("DLNA Stop")
         onStop?.invoke()
     }
@@ -106,7 +112,28 @@ class DlnaMediaRenderer {
         onMuteChanged?.invoke(muted)
     }
 
+    @Synchronized
     fun getState(): MediaState = state.copy()
+
+    @Synchronized
+    fun onPlayerStopped(sessionId: Long, releaseMedia: Boolean): Boolean {
+        if (sessionId != mediaSessionId) return false
+        if (releaseMedia) {
+            state = MediaState(volume = state.volume, muted = state.muted)
+            mediaSessionId++
+        } else {
+            updatePosition(0L, 0L)
+            setStopped()
+        }
+        return releaseMedia
+    }
+
+    @Synchronized
+    fun onPlayerPosition(sessionId: Long, position: Long, duration: Long, isPlaying: Boolean) {
+        if (sessionId != mediaSessionId || state.uri.isBlank()) return
+        updatePosition(position, duration)
+        if (isPlaying) setPlaying() else setPaused()
+    }
 
     fun updatePosition(position: Long, duration: Long) {
         state.position = position
@@ -118,7 +145,7 @@ class DlnaMediaRenderer {
     }
 
     fun setStopped() {
-        state.transportState = TransportState.STOPPED
+        state.transportState = if (state.uri.isBlank()) TransportState.NO_MEDIA_PRESENT else TransportState.STOPPED
     }
 
     fun setPaused() {

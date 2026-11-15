@@ -2,6 +2,7 @@ package top.jast.miracastreceiver.miracast
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TsDemuxerTest {
@@ -9,10 +10,12 @@ class TsDemuxerTest {
     private val videoUnits = mutableListOf<ByteArray>()
     private val audioUnits = mutableListOf<Pair<TsDemuxer.AudioCodec, ByteArray>>()
     private var audioGaps = 0
+    private var videoGaps = 0
 
     private val demuxer = TsDemuxer(
         onAccessUnit = { data, _ -> videoUnits += data },
-        onAudioPes = { codec, data -> audioUnits += codec to data },
+        onDiscontinuity = { videoGaps++ },
+        onAudioPes = { codec, data, _ -> audioUnits += codec to data },
         onAudioDiscontinuity = { audioGaps++ }
     )
 
@@ -117,5 +120,44 @@ class TsDemuxerTest {
 
         assertEquals(1, audioGaps)
         assertEquals(0, audioUnits.size)
+        assertEquals(0, videoGaps)
+    }
+
+    @Test
+    fun lostAudioPacketDoesNotSuspendIntactVideo() {
+        val firstVideo = byteArrayOf(0, 0, 1, 0x41, 1)
+        val secondVideo = byteArrayOf(0, 0, 1, 0x41, 2)
+        val audio = pes(0xC0, ByteArray(300), withLength = true)
+        feed(pat(), pmt(0x0F),
+            tsPacket(0x1011, true, pes(0xE0, firstVideo, withLength = false)),
+            tsPacket(0x1100, true, audio.copyOfRange(0, 184)))
+        cc[0x1100] = (cc[0x1100] + 1) and 0x0f
+        feed(tsPacket(0x1100, false, audio.copyOfRange(184, audio.size)),
+            tsPacket(0x1011, true, pes(0xE0, secondVideo, withLength = false)))
+        assertEquals(1, audioGaps)
+        assertEquals(0, videoGaps)
+        assertArrayEquals(firstVideo, videoUnits.single())
+    }
+
+    @Test
+    fun duplicatedTsPacketIsNotAppendedOrReportedAsLoss() {
+        val data = ByteArray(300) { it.toByte() }
+        val audio = pes(0xC0, data, withLength = true)
+        val first = tsPacket(0x1100, true, audio.copyOfRange(0, 184))
+        feed(pat(), pmt(0x0F), first, first,
+            tsPacket(0x1100, false, audio.copyOfRange(184, audio.size)))
+        assertEquals(0, audioGaps)
+        assertArrayEquals(data, audioUnits.single().second)
+    }
+
+    @Test
+    fun realVideoGapStillDropsTheIncompleteAccessUnit() {
+        val video = pes(0xE0, ByteArray(300), withLength = false)
+        feed(pat(), pmt(0x0F), tsPacket(0x1011, true, video.copyOfRange(0, 184)))
+        cc[0x1011] = (cc[0x1011] + 1) and 0x0f
+        feed(tsPacket(0x1011, false, video.copyOfRange(184, video.size)),
+            tsPacket(0x1011, true, pes(0xE0, byteArrayOf(0, 0, 1, 0x65), withLength = false)))
+        assertEquals(1, videoGaps)
+        assertTrue(videoUnits.isEmpty())
     }
 }

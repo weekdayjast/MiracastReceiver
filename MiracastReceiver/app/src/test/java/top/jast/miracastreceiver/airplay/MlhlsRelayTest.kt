@@ -4,6 +4,53 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class MlhlsRelayTest {
+    @Test fun fetchesMediaPlaylistBeforeServingMasterAndReusesFinishedPlaylist() {
+        val requested = java.util.concurrent.CopyOnWriteArrayList<String>()
+        lateinit var relay: MlhlsRelay
+        relay = MlhlsRelay { event ->
+            val request = event["request"] as Map<*, *>
+            val url = request["FCUP_Response_URL"] as String
+            requested.add(url.substringAfterLast('/'))
+            val manifest = if (url.endsWith("/master.m3u8")) {
+                "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1000\nvideo.m3u8\n"
+            } else {
+                "#EXTM3U\n#EXTINF:5,\nhttps://example.com/segment.ts\n#EXT-X-ENDLIST\n"
+            }
+            relay.action(mapOf("type" to "unhandledURLResponse", "params" to mapOf(
+                "FCUP_Response_RequestID" to request["FCUP_Response_RequestID"],
+                "FCUP_Response_Data" to manifest.toByteArray(),
+            )))
+        }
+        try {
+            val masterUrl = relay.play("mlhls://localhost/master.m3u8", "test-session")
+            val master = java.net.URL(masterUrl).readText()
+            assertEquals(listOf("master.m3u8", "video.m3u8"), requested.toList())
+            val mediaUrl = master.lineSequence().first { it.startsWith("http://") }
+            assertTrue(java.net.URL(mediaUrl).readText().contains("segment.ts"))
+            assertEquals(2, requested.size)
+        } finally { relay.close() }
+    }
+
+    @Test fun permitsLargeActionWithoutIncreasingTheGeneralRequestLimit() {
+        val reader = RtspRequestReader(65536, PhotoHandler.MAX_PHOTO_BYTES)
+        val body = ByteArray(383079)
+        fun request(path: String) =
+            ("POST $path HTTP/1.1\r\nContent-Length: ${body.size}\r\n\r\n".toByteArray() + body).inputStream()
+        assertArrayEquals(body, reader.read(request("/action"))?.bodyBytes)
+        assertNull(reader.read(request("/play")))
+    }
+
+    @Test fun acceptsLargeArtworkWithoutIncreasingTheLimitForOtherParameters() {
+        val reader = RtspRequestReader(65536, PhotoHandler.MAX_PHOTO_BYTES)
+        val body = ByteArray(69090)
+        fun request(contentType: String) = (
+            "SET_PARAMETER rtsp://receiver/session RTSP/1.0\r\n" +
+                "Content-Type: $contentType\r\nContent-Length: ${body.size}\r\n\r\n"
+            ).toByteArray() + body
+        assertArrayEquals(body, reader.read(request("image/jpeg").inputStream())?.bodyBytes)
+        assertNull(reader.read(request("text/parameters").inputStream()))
+    }
+
     @Test fun servesSenderResponseOverLoopback() {
         lateinit var relay: MlhlsRelay
         relay = MlhlsRelay { event ->

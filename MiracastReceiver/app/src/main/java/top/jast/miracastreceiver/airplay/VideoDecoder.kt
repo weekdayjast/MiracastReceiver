@@ -61,6 +61,10 @@ class VideoDecoder(private val outputSurface: Surface) {
 
     @Volatile
     private var outputRunning = false
+    @Volatile var framesQueued = 0L
+        private set
+    @Volatile var framesReleased = 0L
+        private set
 
     /**
      * Initializes the MediaCodec decoder with the video stream parameters from the SDP.
@@ -200,7 +204,10 @@ class VideoDecoder(private val outputSurface: Surface) {
                     // 阻塞等待而不是轮询：解码器一有输出就立刻返回，延迟最低
                     val index = codec.dequeueOutputBuffer(bufferInfo, OUTPUT_BUFFER_TIMEOUT_US)
                     when {
-                        index >= 0 -> codec.releaseOutputBuffer(index, true)
+                        index >= 0 -> {
+                            codec.releaseOutputBuffer(index, true)
+                            framesReleased++
+                        }
                         index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED ->
                             publishOutputSize(codec.outputFormat)
                         // INFO_TRY_AGAIN_LATER：超时无输出，继续等
@@ -241,9 +248,16 @@ class VideoDecoder(private val outputSurface: Surface) {
      * @param presentationTimeUs Presentation timestamp in microseconds (for A/V sync).
      */
     fun decodeNalUnit(nalUnit: ByteArray, presentationTimeUs: Long) {
+        if (!tryQueueNalUnit(nalUnit, presentationTimeUs)) {
+            Logger.v("VideoDecoder: input not accepted, dropping NAL unit")
+        }
+    }
+
+    /** False means no input was queued. Miracast may retry the SAME access unit. */
+    fun tryQueueNalUnit(nalUnit: ByteArray, presentationTimeUs: Long): Boolean {
         val codec = mediaCodec ?: run {
             Logger.w("decodeNalUnit() called but decoder not initialized")
-            return
+            return false
         }
 
         try {
@@ -269,10 +283,10 @@ class VideoDecoder(private val outputSurface: Surface) {
                     presentationTimeUs,
                     0                  // flags: 0 = normal frame (not end-of-stream)
                 )
+                framesQueued++
+                return true
             } else {
-                // No input buffer available — the decoder is catching up.
-                // Drop this NAL unit to avoid building up backlog (prefer low latency).
-                Logger.v("VideoDecoder: no input buffer available, dropping NAL unit")
+                return false
             }
         } catch (e: IllegalStateException) {
             // MediaCodec is now in the error state and cannot recover — flag for recreation.
@@ -280,12 +294,15 @@ class VideoDecoder(private val outputSurface: Surface) {
             isHealthy = false
         } catch (e: Exception) {
             Logger.e("Error decoding NAL unit", e)
+            isHealthy = false
         }
+        return false
     }
 
     /*
      * 送显策略（原 releaseOutputBuffers 的注释，逻辑已移入输出线程）：
-     * 一律 releaseOutputBuffer(index, true) 立即渲染，刻意**不**做定时送显来对齐音画 ——
+     * releaseOutputBuffer(index, true) 立即渲染。
+     * 默认路径不做定时送显来对齐音画 ——
      * 这个 Surface 的 BufferQueue 只有约 3 帧，任何等待都会迅速反压到解码器，
      * 导致上游队列积压、延迟飙升并丢帧（丢帧即花屏）。
      * 音画对齐靠 AudioStreamServer 保持音频路径低延迟来实现。

@@ -73,14 +73,17 @@ internal class RtspRequestReader(
         headers: Map<String, String>
     ): ByteArray? {
         val contentLength = headers["Content-Length"]?.toIntOrNull() ?: 0
-        val bodyLimit = if (method == "PUT" && uri.substringBefore("?") == PhotoHandler.PHOTO_PATH) {
-            maxPhotoBytes
-        } else {
-            maxMessageBytes
+        val path = uri.substringBefore('?')
+        val bodyLimit = when {
+            method == "PUT" && path == PhotoHandler.PHOTO_PATH -> maxPhotoBytes
+            method == "SET_PARAMETER" && headers["Content-Type"]?.startsWith("image/", ignoreCase = true) == true ->
+                maxPhotoBytes
+            method == "POST" && path == "/action" -> MAX_ACTION_BODY_BYTES
+            else -> maxMessageBytes
         }
 
         if (contentLength > bodyLimit) {
-            Logger.w("Request body too large ($contentLength bytes) — rejecting")
+            Logger.w("Request body too large for $method $path ($contentLength bytes, limit=$bodyLimit)")
             return null
         }
         if (contentLength <= 0) return ByteArray(0)
@@ -105,6 +108,10 @@ internal class RtspRequestReader(
             sb.append(b.toChar())
             if (sb.length > maxMessageBytes) return null
         }
+    }
+
+    private companion object {
+        const val MAX_ACTION_BODY_BYTES = 1024 * 1024
     }
 }
 
