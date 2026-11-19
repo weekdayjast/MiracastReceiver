@@ -63,7 +63,7 @@ class UibcSender(private val host: String, private val port: Int) {
     private var pendingDx = 0
     private var pendingDy = 0
     private var pendingWheel = 0
-    private var flushScheduled = false
+    private var mouseFlushInFlight = false
 
     @Volatile
     var connected = false
@@ -80,8 +80,8 @@ class UibcSender(private val host: String, private val port: Int) {
             connected = true
             Timber.i("UIBC: connected to %s:%d", host, port)
             // The source needs the HID report descriptors before input reports.
-            sendHidc(HID_TYPE_KEYBOARD, USAGE_DESCRIPTOR, KEYBOARD_DESCRIPTOR)
-            sendHidc(HID_TYPE_MOUSE, USAGE_DESCRIPTOR, MOUSE_DESCRIPTOR)
+            sendHidc(HID_TYPE_KEYBOARD, USAGE_DESCRIPTOR, KEYBOARD_DESCRIPTOR, direct = true)
+            sendHidc(HID_TYPE_MOUSE, USAGE_DESCRIPTOR, MOUSE_DESCRIPTOR, direct = true)
             startReader(s)
             true
         } catch (e: Exception) {
@@ -191,15 +191,21 @@ class UibcSender(private val host: String, private val port: Int) {
             pendingDx += dx
             pendingDy += dy
             pendingWheel += wheel
-            if (flushScheduled) return
-            flushScheduled = true
+            if (mouseFlushInFlight) return
+            mouseFlushInFlight = true
         }
+        scheduleMouseFlush()
+    }
+
+    /**
+     * Event driven with backpressure: send immediately; if a write is already in
+     * flight, accumulate and send the remainder as soon as that write completes.
+     * This adds no artificial delay and cannot grow an unbounded queue.
+     */
+    private fun scheduleMouseFlush() {
         try {
             writer.execute {
-                // Coalesce high-rate motion events into ~100 Hz reports.
-                Thread.sleep(10)
                 val delta = synchronized(mouseLock) {
-                    flushScheduled = false
                     val d = pendingDx.coerceIn(-127, 127)
                     val e = pendingDy.coerceIn(-127, 127)
                     val w = pendingWheel.coerceIn(-127, 127)
@@ -208,21 +214,30 @@ class UibcSender(private val host: String, private val port: Int) {
                     pendingWheel = 0
                     intArrayOf(d, e, w)
                 }
-                sendMouseReport(delta[0], delta[1], delta[2])
+                sendMouseReport(delta[0], delta[1], delta[2], direct = true)
+                val more = synchronized(mouseLock) {
+                    if (pendingDx != 0 || pendingDy != 0 || pendingWheel != 0) {
+                        true
+                    } else {
+                        mouseFlushInFlight = false
+                        false
+                    }
+                }
+                if (more) scheduleMouseFlush()
             }
         } catch (_: Exception) {
-            // writer already shut down after close()
+            synchronized(mouseLock) { mouseFlushInFlight = false }
         }
     }
 
-    private fun sendMouseReport(dx: Int, dy: Int, wheel: Int) {
+    private fun sendMouseReport(dx: Int, dy: Int, wheel: Int, direct: Boolean) {
         val report = byteArrayOf(
             buttons.toByte(),
             dx.toByte(),
             dy.toByte(),
             wheel.toByte()
         )
-        sendHidc(HID_TYPE_MOUSE, USAGE_INPUT_REPORT, report)
+        sendHidc(HID_TYPE_MOUSE, USAGE_INPUT_REPORT, report, direct)
     }
 
     fun sendMouseButton(androidButton: Int, down: Boolean) {
@@ -235,7 +250,7 @@ class UibcSender(private val host: String, private val port: Int) {
         }
         if (bit == 0) return
         synchronized(lock) { buttons = if (down) buttons or bit else buttons and bit.inv() }
-        sendMouseReport(0, 0, 0)
+        sendMouseReport(0, 0, 0, direct = false)
     }
 
     fun sendWheel(delta: Int) {
@@ -252,7 +267,7 @@ class UibcSender(private val host: String, private val port: Int) {
         sendHidc(HID_TYPE_KEYBOARD, USAGE_INPUT_REPORT, report)
     }
 
-    private fun sendHidc(hidType: Int, usage: Int, value: ByteArray) {
+    private fun sendHidc(hidType: Int, usage: Int, value: ByteArray, direct: Boolean = false) {
         val payload = ByteArray(5 + value.size)
         payload[0] = HID_INPUT_PATH_USB.toByte()
         payload[1] = hidType.toByte()
@@ -269,21 +284,27 @@ class UibcSender(private val host: String, private val port: Int) {
             ((total shr 8) and 0xff).toByte(),
             (total and 0xff).toByte()
         )
-        try {
-            writer.execute {
-                synchronized(lock) {
-                    try {
-                        output?.write(header)
-                        output?.write(payload)
-                        output?.flush()
-                    } catch (e: Exception) {
-                        Timber.w(e, "UIBC: send failed")
-                        close()
-                    }
-                }
+        if (direct) {
+            writeFrame(header, payload)
+        } else {
+            try {
+                writer.execute { writeFrame(header, payload) }
+            } catch (_: Exception) {
+                // writer already shut down after close()
             }
-        } catch (_: Exception) {
-            // writer already shut down after close()
+        }
+    }
+
+    private fun writeFrame(header: ByteArray, payload: ByteArray) {
+        synchronized(lock) {
+            try {
+                output?.write(header)
+                output?.write(payload)
+                output?.flush()
+            } catch (e: Exception) {
+                Timber.w(e, "UIBC: send failed")
+                close()
+            }
         }
     }
 
