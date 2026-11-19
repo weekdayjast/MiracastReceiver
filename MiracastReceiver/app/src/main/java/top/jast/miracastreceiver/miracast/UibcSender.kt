@@ -36,15 +36,13 @@ class UibcSender(private val host: String, private val port: Int) {
             0x25, 0x65, 0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81.toByte(), 0x00, 0xC0.toByte()
         )
 
-        /** USB HID absolute mouse: 3 buttons, absolute X/Y (0..32767), wheel. */
+        /** USB HID boot mouse: 3 buttons, relative X/Y, wheel. Works across displays. */
         private val MOUSE_DESCRIPTOR = byteArrayOf(
             0x05, 0x01, 0x09, 0x02, 0xA1.toByte(), 0x01, 0x09, 0x01, 0xA1.toByte(), 0x00,
             0x05, 0x09, 0x19, 0x01, 0x29, 0x03, 0x15, 0x00, 0x25, 0x01, 0x95.toByte(), 0x03,
             0x75, 0x01, 0x81.toByte(), 0x02, 0x95.toByte(), 0x01, 0x75, 0x05, 0x81.toByte(), 0x01,
-            0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x16, 0x00, 0x00, 0x26, 0xFF.toByte(), 0x7F,
-            0x75, 0x10, 0x95.toByte(), 0x02, 0x81.toByte(), 0x02,
-            0x09, 0x38, 0x15, 0x81.toByte(), 0x25, 0x7F, 0x75, 0x08, 0x95.toByte(), 0x01, 0x81.toByte(), 0x06,
-            0xC0.toByte(), 0xC0.toByte()
+            0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38, 0x15, 0x81.toByte(), 0x25,
+            0x7F, 0x75, 0x08, 0x95.toByte(), 0x03, 0x81.toByte(), 0x06, 0xC0.toByte(), 0xC0.toByte()
         )
     }
 
@@ -61,8 +59,11 @@ class UibcSender(private val host: String, private val port: Int) {
     private var modifiers = 0
     private val keys = IntArray(6) { 0 }
     private var buttons = 0
-    private var lastX = 16384
-    private var lastY = 16384
+    private val mouseLock = Any()
+    private var pendingDx = 0
+    private var pendingDy = 0
+    private var pendingWheel = 0
+    private var flushScheduled = false
 
     @Volatile
     var connected = false
@@ -184,21 +185,44 @@ class UibcSender(private val host: String, private val port: Int) {
         sendKeyboardReport()
     }
 
-    fun sendMouseAbsolute(x: Int, y: Int, wheel: Int = 0) {
+    fun sendMouse(dx: Int, dy: Int, wheel: Int = 0) {
         if (!connected) return
-        synchronized(lock) {
-            lastX = x.coerceIn(0, 32767)
-            lastY = y.coerceIn(0, 32767)
-            val report = byteArrayOf(
-                buttons.toByte(),
-                (lastX and 0xff).toByte(),
-                ((lastX shr 8) and 0xff).toByte(),
-                (lastY and 0xff).toByte(),
-                ((lastY shr 8) and 0xff).toByte(),
-                clamp(wheel).toByte()
-            )
-            sendHidc(HID_TYPE_MOUSE, USAGE_INPUT_REPORT, report)
+        synchronized(mouseLock) {
+            pendingDx += dx
+            pendingDy += dy
+            pendingWheel += wheel
+            if (flushScheduled) return
+            flushScheduled = true
         }
+        try {
+            writer.execute {
+                // Coalesce high-rate motion events into ~100 Hz reports.
+                Thread.sleep(10)
+                val delta = synchronized(mouseLock) {
+                    flushScheduled = false
+                    val d = pendingDx.coerceIn(-127, 127)
+                    val e = pendingDy.coerceIn(-127, 127)
+                    val w = pendingWheel.coerceIn(-127, 127)
+                    pendingDx = 0
+                    pendingDy = 0
+                    pendingWheel = 0
+                    intArrayOf(d, e, w)
+                }
+                sendMouseReport(delta[0], delta[1], delta[2])
+            }
+        } catch (_: Exception) {
+            // writer already shut down after close()
+        }
+    }
+
+    private fun sendMouseReport(dx: Int, dy: Int, wheel: Int) {
+        val report = byteArrayOf(
+            buttons.toByte(),
+            dx.toByte(),
+            dy.toByte(),
+            wheel.toByte()
+        )
+        sendHidc(HID_TYPE_MOUSE, USAGE_INPUT_REPORT, report)
     }
 
     fun sendMouseButton(androidButton: Int, down: Boolean) {
@@ -211,12 +235,12 @@ class UibcSender(private val host: String, private val port: Int) {
         }
         if (bit == 0) return
         synchronized(lock) { buttons = if (down) buttons or bit else buttons and bit.inv() }
-        sendMouseAbsolute(lastX, lastY)
+        sendMouseReport(0, 0, 0)
     }
 
     fun sendWheel(delta: Int) {
         if (!connected) return
-        sendMouseAbsolute(lastX, lastY, delta)
+        sendMouse(0, 0, delta)
     }
 
     private fun sendKeyboardReport() {
@@ -262,8 +286,6 @@ class UibcSender(private val host: String, private val port: Int) {
             // writer already shut down after close()
         }
     }
-
-    private fun clamp(value: Int): Int = value.coerceIn(-127, 127)
 
     private fun isModifier(code: Int): Boolean =
         code == KeyEvent.KEYCODE_SHIFT_LEFT || code == KeyEvent.KEYCODE_SHIFT_RIGHT ||

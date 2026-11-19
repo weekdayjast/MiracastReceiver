@@ -181,6 +181,10 @@ class PlayerActivity : AppCompatActivity() {
     private var lastCropSampleAt = 0L
     private var cropSession = 0
     private var autoRotateToFit = false
+    private var lastMouseX = -1f
+    private var lastMouseY = -1f
+    private var mouseAccX = 0f
+    private var mouseAccY = 0f
     /** 镜像旋转用的 TextureView 层：0° 时隐藏，仍走 SurfaceView 保住电视上的性能。 */
     private lateinit var mirrorRotateLayer: FrameLayout
     private lateinit var mirrorRotateTexture: TextureView
@@ -276,8 +280,11 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(R.layout.activity_player)
         // UIBC 反向控制时隐藏投影仪本地鼠标指针，避免与 Windows 指针重叠。
         runCatching {
-            window?.decorView?.pointerIcon =
-                android.view.PointerIcon.load(resources, R.drawable.pointer_transparent)
+            val nullIcon = android.view.PointerIcon.getSystemIcon(
+                this, android.view.PointerIcon.TYPE_NULL
+            )
+            window?.decorView?.pointerIcon = nullIcon
+            findViewById<View>(android.R.id.content)?.pointerIcon = nullIcon
         }
 
         initViews()
@@ -597,12 +604,27 @@ class PlayerActivity : AppCompatActivity() {
         if (event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) {
             when (event.actionMasked) {
                 MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
-                    val metrics = resources.displayMetrics
-                    val w = metrics.widthPixels.coerceAtLeast(1)
-                    val h = metrics.heightPixels.coerceAtLeast(1)
-                    val nx = (event.x / w * 32767f).toInt().coerceIn(0, 32767)
-                    val ny = (event.y / h * 32767f).toInt().coerceIn(0, 32767)
-                    top.jast.miracastreceiver.miracast.UibcBridge.mouseAbsolute(nx, ny)
+                    var fdx = event.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
+                    var fdy = event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
+                    if (fdx == 0f && fdy == 0f) {
+                        // Fallback for devices that only report absolute positions.
+                        if (lastMouseX >= 0f) {
+                            fdx = event.x - lastMouseX
+                            fdy = event.y - lastMouseY
+                        }
+                        lastMouseX = event.x
+                        lastMouseY = event.y
+                    }
+                    // Keep sub-pixel deltas so slow movement is not lost.
+                    mouseAccX += fdx
+                    mouseAccY += fdy
+                    val dx = kotlin.math.round(mouseAccX).toInt()
+                    val dy = kotlin.math.round(mouseAccY).toInt()
+                    mouseAccX -= dx
+                    mouseAccY -= dy
+                    if (dx != 0 || dy != 0) {
+                        top.jast.miracastreceiver.miracast.UibcBridge.mouse(dx, dy)
+                    }
                 }
                 MotionEvent.ACTION_SCROLL -> {
                     val v = event.getAxisValue(MotionEvent.AXIS_VSCROLL)

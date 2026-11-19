@@ -9,8 +9,8 @@ object UibcBridge {
         sender?.sendKey(androidKeyCode, down)
     }
 
-    fun mouseAbsolute(x: Int, y: Int, wheel: Int = 0) {
-        sender?.sendMouseAbsolute(x, y, wheel)
+    fun mouse(dx: Int, dy: Int, wheel: Int = 0) {
+        sender?.sendMouse(dx, dy, wheel)
     }
 
     fun mouseButton(button: Int, down: Boolean) {
