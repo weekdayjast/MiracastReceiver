@@ -1,9 +1,9 @@
 package top.jast.miracastreceiver.miracast
 
 import android.content.Context
+import top.jast.miracastreceiver.BuildConfig
 import timber.log.Timber
 import java.io.File
-
 /**
  * 通过 root 向 wpa_supplicant 注入 Wi-Fi Display Sink 的 WFD IE。
  *
@@ -35,8 +35,9 @@ object WfdRootHelper {
      *   0032 → 最大吞吐 50 Mbps
      * 前面的 0006 是子元素长度字段，wpa_supplicant 要求连长度一起给。
      */
-    private fun subelemHex(controlPort: Int, maxThroughputMbps: Int = 50): String =
-        "0006" + "0011" + "%04x".format(controlPort) + "%04x".format(maxThroughputMbps)
+    private fun subelemHex(controlPort: Int, maxThroughputMbps: Int = 50, uibc: Boolean = false): String =
+        "0006" + (if (uibc) "0111" else "0011") +
+            "%04x".format(controlPort) + "%04x".format(maxThroughputMbps)
 
     /**
      * 注入 WFD IE，让本机以 Miracast Sink 的身份被发现。
@@ -95,10 +96,11 @@ object WfdRootHelper {
      */
     fun advertiseViaSystemExecutor(context: Context, controlPort: Int = 7236): Boolean {
         // Preferred: run WfdSystemMain as uid 1000 and use the framework API directly.
-        if (advertiseViaFramework(context, controlPort)) return true
+        // The framework cannot express the UIBC bits, so UIBC always uses the supplicant path.
+        if (!BuildConfig.UIBC_ENABLED && advertiseViaFramework(context, controlPort)) return true
 
         // Fallback for ROMs where the framework path is unavailable: drive wpa_supplicant.
-        val subelem = subelemHex(controlPort)
+        val subelem = subelemHex(controlPort, uibc = BuildConfig.UIBC_ENABLED)
         val socket = File(CTRL_SOCKET_PATHS.first())
         val dirs = listOf(
             "/data/vendor",
@@ -121,6 +123,10 @@ object WfdRootHelper {
         val cli = "/vendor/bin/wpa_cli"
         SystemExecClient.exec(context, "$cli -p /data/vendor/wifi/wpa/sockets -i p2p0 SET wifi_display 1", 20_000)
         SystemExecClient.exec(context, "$cli -p /data/vendor/wifi/wpa/sockets -i p2p0 WFD_SUBELEM_SET 0 $subelem", 20_000)
+        if (BuildConfig.UIBC_ENABLED) {
+            // WFD Extended Capability (subelement 7): 2-byte bitmap, B0 = UIBC support.
+            SystemExecClient.exec(context, "$cli -p /data/vendor/wifi/wpa/sockets -i p2p0 WFD_SUBELEM_SET 7 00020001", 20_000)
+        }
 
         val ok = socket.exists()
         Timber.i("WFD: system-executor inject %s (socket exists=%s)", if (ok) "ok" else "failed", ok)

@@ -31,6 +31,7 @@ import top.jast.miracastreceiver.dlna.DlnaMediaRenderer
 import top.jast.miracastreceiver.dlna.SsdpServer
 import top.jast.miracastreceiver.dlna.UpnpHttpServer
 import top.jast.miracastreceiver.miracast.WfdRootHelper
+import top.jast.miracastreceiver.BuildConfig
 import top.jast.miracastreceiver.miracast.WfdServer
 import top.jast.miracastreceiver.miracast.WifiDirectManager
 import top.jast.miracastreceiver.util.AppLanguage
@@ -262,7 +263,7 @@ class CastReceiverService : Service() {
     }
 
     private fun initWfdServer() {
-        wfdServer = WfdServer(this, 7236).apply {
+        wfdServer = WfdServer(this, 7236, uibcEnabled = BuildConfig.UIBC_ENABLED).apply {
             onConnectionRequested = { clientName, clientAddress ->
                 Timber.i("Miracast connection requested: $clientName from $clientAddress")
             }

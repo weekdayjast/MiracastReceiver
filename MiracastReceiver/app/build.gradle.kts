@@ -11,6 +11,7 @@ val targetAbis = when {
 }
 val buildUniversalApk = targetAbis.size > 1
 val useUxPlay = providers.gradleProperty("useUxPlay").isPresent
+val uibcEnabled = providers.gradleProperty("uibc").orNull?.toBoolean() ?: false
 if (useUxPlay) require(targetAbis.all { it in listOf("armeabi-v7a", "arm64-v8a") }) {
     "UxPlay libraries are available for ARM32 and ARM64 only"
 }
@@ -32,6 +33,7 @@ android {
         versionCode = 25
         versionName = "1.2.16"
         buildConfigField("boolean", "USE_UXPLAY", useUxPlay.toString())
+        buildConfigField("boolean", "UIBC_ENABLED", uibcEnabled.toString())
         if (useUxPlay) minSdk = 23
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"

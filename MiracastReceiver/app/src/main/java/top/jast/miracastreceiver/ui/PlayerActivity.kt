@@ -20,6 +20,7 @@ import android.graphics.SurfaceTexture
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -273,6 +274,11 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         autoRotateToFit = top.jast.miracastreceiver.util.AppSettings.isAutoRotateToFit(this)
         setContentView(R.layout.activity_player)
+        // UIBC 反向控制时隐藏投影仪本地鼠标指针，避免与 Windows 指针重叠。
+        runCatching {
+            window?.decorView?.pointerIcon =
+                android.view.PointerIcon.load(resources, R.drawable.pointer_transparent)
+        }
 
         initViews()
         initPlayer()
@@ -587,7 +593,37 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
+                    val metrics = resources.displayMetrics
+                    val w = metrics.widthPixels.coerceAtLeast(1)
+                    val h = metrics.heightPixels.coerceAtLeast(1)
+                    val nx = (event.x / w * 32767f).toInt().coerceIn(0, 32767)
+                    val ny = (event.y / h * 32767f).toInt().coerceIn(0, 32767)
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseAbsolute(nx, ny)
+                }
+                MotionEvent.ACTION_SCROLL -> {
+                    val v = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                    if (v != 0f) top.jast.miracastreceiver.miracast.UibcBridge.wheel(if (v > 0) 1 else -1)
+                }
+                MotionEvent.ACTION_BUTTON_PRESS ->
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(event.actionButton, true)
+                MotionEvent.ACTION_BUTTON_RELEASE ->
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(event.actionButton, false)
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // 遥控器/键盘按键回传到 Source（UIBC HIDC）
+        if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
+            top.jast.miracastreceiver.miracast.UibcBridge.key(
+                event.keyCode, event.action == KeyEvent.ACTION_DOWN
+            )
+        }
         // 镜像/图片模式：遥控器按 OK 或上下键先呼出旋转按钮并给它焦点，再按 OK 就旋转
         if (event.action == KeyEvent.ACTION_DOWN && !isDialogShowing && usesRotateOverlay() &&
             event.keyCode in ROTATE_REVEAL_KEYS) {

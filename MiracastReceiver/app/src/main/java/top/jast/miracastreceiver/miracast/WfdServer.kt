@@ -28,7 +28,8 @@ import java.net.Socket
 class WfdServer(
     private val context: Context,
     private val port: Int = 7236,
-    private val rtpPort: Int = 19000
+    private val rtpPort: Int = 19000,
+    private val uibcEnabled: Boolean = false
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -143,7 +144,7 @@ class WfdServer(
         }
         rtpReceiver = receiver
 
-        val handler = WfdSessionHandler(context, socket, rtpPort).apply {
+        val handler = WfdSessionHandler(context, socket, rtpPort, uibcEnabled = uibcEnabled).apply {
             onSessionEstablished = { onConnectionEstablished?.invoke(it) }
             onStreamStart = { onStreamStarted?.invoke(it) }
             onStreamStop = { onStreamStopped?.invoke() }
