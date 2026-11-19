@@ -565,6 +565,27 @@ class CastReceiverService : Service() {
         }.getOrDefault(false)
         if (systemEnabled) {
             ReceiverStatus.miracast = ReceiverStatus.Miracast.SYSTEM_MANAGED
+            // The switch only proves the setting exists; some vendor ROMs never advertise
+            // a WFD sink. If this ROM exposes a system-uid executor, inject the IE anyway.
+            if (rootAdvertisingPending) return
+            rootAdvertisingPending = true
+            rootAdvertisingAttempted = true
+            val appContext = applicationContext
+            Timber.i("Miracast: wifi_display_on=1, trying vendor system executor")
+            wfdRootExecutor.execute {
+                val ok = runCatching {
+                    WfdRootHelper.isSystemExecutorAvailable(appContext) &&
+                        WfdRootHelper.advertiseViaSystemExecutor(appContext)
+                }.getOrDefault(false)
+                mainHandler.post {
+                    rootAdvertisingPending = false
+                    if (!stopping && ok) {
+                        rootAdvertisingActive = true
+                        ReceiverStatus.miracast = ReceiverStatus.Miracast.ADVERTISING
+                        Timber.i("Miracast startup: injected sink IE via vendor system executor")
+                    }
+                }
+            }
             return
         }
         if (rootAdvertisingPending) return

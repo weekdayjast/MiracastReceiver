@@ -20,7 +20,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "top.jast.miracastreceiver"
+        // Default: the original package id. On JMGO projectors the vendor background
+        // manager only spares com.jmgo.* packages, so build with
+        //   -PjmgoPackageId=com.jmgo.miracastreceiver
+        // to keep the boot-time receiver alive on those devices.
+        applicationId = providers.gradleProperty("jmgoPackageId").orNull
+            ?: "top.jast.miracastreceiver"
+        multiDexKeepProguard = file("multidex-keep.pro")
         minSdk = 21
         targetSdk = 36
         versionCode = 25

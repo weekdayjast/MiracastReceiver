@@ -16,6 +16,8 @@
     <!-- Wi-Fi Direct 需要定位权限。Android 12+ 只申请 FINE 会被系统拒绝，必须同时声明 COARSE。 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <!-- 开机自启的前台服务在后台创建 Wi-Fi Direct 组时需要定位，必须声明后台定位权限 -->
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
 
     <!-- Wi-Fi Direct / Miracast 发现 -->
@@ -47,6 +49,8 @@
     <queries>
         <package android:name="com.huawei.hms.kitframework" />
         <package android:name="com.huawei.dmsdpdevice" />
+        <!-- JMGO 固件的 system(uid 1000) 执行器，用于无 root 注入 WFD IE -->
+        <package android:name="com.jmgo.systemapi" />
     </queries>
 
     <application

@@ -48,7 +48,17 @@ object WfdRootHelper {
         advertiseSinkResult(context, controlPort) == AdvertiseResult.COMMAND_SENT
 
     fun advertiseSinkResult(context: Context, controlPort: Int = 7236): AdvertiseResult {
-        if (!isRootAvailable()) return AdvertiseResult.ROOT_UNAVAILABLE
+        if (!isRootAvailable()) {
+            // No su on this device. Some vendor ROMs ship a system-uid executor; use it
+            // to open the 0770 wpa_supplicant path and write the WFD IE without root.
+            // Guard on the package so other devices see no behaviour change at all.
+            if (isSystemExecutorAvailable(context) &&
+                advertiseViaSystemExecutor(context, controlPort)
+            ) {
+                return AdvertiseResult.COMMAND_SENT
+            }
+            return AdvertiseResult.ROOT_UNAVAILABLE
+        }
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) {
             Timber.w("WFD: $BINARY_NAME not found in nativeLibraryDir")
@@ -73,6 +83,75 @@ object WfdRootHelper {
             AdvertiseResult.COMMAND_FAILED
         }
     }
+
+    /**
+     * 无 root 路径：借厂商的 system(uid 1000) 执行器完成同一件事。
+     *
+     * 关键点（实测）：
+     *  - /data/vendor 及 wifi 子目录是 0770 wifi:wifi，普通应用连目录都进不去；
+     *    init 的 `vendor.jmgo.hal.change.permission` 触发器会 chmod 0664 + chown system，
+     *    之后 uid 1000 作为属主可以 chmod 777 打开路径。
+     *  - dgram ctrl 必须整包发送、末尾不能带换行，否则 WFD_SUBELEM_SET 会被静默丢弃。
+     */
+    fun advertiseViaSystemExecutor(context: Context, controlPort: Int = 7236): Boolean {
+        // Preferred: run WfdSystemMain as uid 1000 and use the framework API directly.
+        if (advertiseViaFramework(context, controlPort)) return true
+
+        // Fallback for ROMs where the framework path is unavailable: drive wpa_supplicant.
+        val subelem = subelemHex(controlPort)
+        val socket = File(CTRL_SOCKET_PATHS.first())
+        val dirs = listOf(
+            "/data/vendor",
+            "/data/vendor/wifi",
+            "/data/vendor/wifi/wpa",
+            "/data/vendor/wifi/wpa/sockets"
+        )
+        // The vendor executor tokenizes the command (no shell), so every step must be a
+        // simple executable plus plain arguments — no pipes, redirections or semicolons.
+        for (d in dirs) {
+            SystemExecClient.exec(context, "setprop vendor.jmgo.hal.change.permission $d", 10_000)
+            Thread.sleep(900)
+            SystemExecClient.exec(context, "chmod 777 $d", 10_000)
+        }
+        SystemExecClient.exec(context, "setprop vendor.jmgo.hal.change.permission $socket", 10_000)
+        Thread.sleep(900)
+        SystemExecClient.exec(context, "chmod 666 $socket", 10_000)
+
+        // wpa_cli speaks the ctrl protocol itself, so no stdin pipeline is needed.
+        val cli = "/vendor/bin/wpa_cli"
+        SystemExecClient.exec(context, "$cli -p /data/vendor/wifi/wpa/sockets -i p2p0 SET wifi_display 1", 20_000)
+        SystemExecClient.exec(context, "$cli -p /data/vendor/wifi/wpa/sockets -i p2p0 WFD_SUBELEM_SET 0 $subelem", 20_000)
+
+        val ok = socket.exists()
+        Timber.i("WFD: system-executor inject %s (socket exists=%s)", if (ok) "ok" else "failed", ok)
+        return ok
+    }
+
+    /**
+     * 以 uid 1000 运行 [WfdSystemMain]（app_process），直接调用框架的
+     * `WifiP2pManager.setWFDInfo()`。这是最干净的路径：由 framework 自己把
+     * wifi_display / WFD 子元素写进 supplicant，不需要打开 socket 路径。
+     *
+     * 成功与否通过 `debug.jmgo.wfd.framework` 属性回传（该进程与 App 不在同一进程）。
+     */
+    fun advertiseViaFramework(context: Context, controlPort: Int = 7236): Boolean {
+        val apk = context.applicationInfo?.sourceDir ?: return false
+        val cmd = "/system/bin/app_process -Djava.class.path=$apk /system/bin " +
+            "top.jast.miracastreceiver.miracast.WfdSystemMain $controlPort"
+        SystemExecClient.exec(context, cmd, 25_000)
+        Thread.sleep(1_000)
+        val ok = readSystemProperty("debug.jmgo.wfd.framework") == "1"
+        Timber.i("WFD: framework setWFDInfo %s", if (ok) "ok" else "failed")
+        return ok
+    }
+
+    private fun readSystemProperty(key: String): String? = runCatching {
+        val sp = Class.forName("android.os.SystemProperties")
+        sp.getMethod("get", String::class.java).invoke(null, key) as? String
+    }.getOrNull()
+
+    /** 该固件是否提供 system 级执行器（com.jmgo.systemapi）。 */
+    fun isSystemExecutorAvailable(context: Context): Boolean = SystemExecClient.isInstalled(context)
 
     /** Rename the native P2P device after this service has already enabled WFD via root. */
     fun setDeviceName(context: Context, displayName: String): Boolean {
