@@ -1,0 +1,1 @@
+-keep class top.jast.miracastreceiver.miracast.WfdSystemMain { *; }

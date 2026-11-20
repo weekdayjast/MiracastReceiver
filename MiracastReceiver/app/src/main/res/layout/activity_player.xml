@@ -87,6 +87,15 @@
             android:textSize="24sp"
             tools:text="播放标题" />
 
+        <TextView
+            android:id="@+id/tv_stats"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:fontFamily="monospace"
+            android:textColor="@color/text_secondary"
+            android:textSize="12sp" />
+
         <!-- 缓冲状态指示器 -->
         <ProgressBar
             android:id="@+id/buffering_indicator"

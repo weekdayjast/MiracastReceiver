@@ -33,6 +33,7 @@ class WfdSessionHandler(
     private val context: Context,
     private val socket: Socket,
     private val rtpPort: Int,
+    private val uibcEnabled: Boolean = false,
     private val customModeProvider: (Boolean) -> WfdCustomVideoMode? = { wfdCustomVideoMode(context, it) }
 ) {
     private val input: InputStream = socket.getInputStream()
@@ -47,6 +48,8 @@ class WfdSessionHandler(
     @Volatile private var idrRequestCseq = -1
     @Volatile private var idrUnsupported = false
     private var advertisedCustomMode: WfdCustomVideoMode? = null
+    private var sourceUibcPort: Int? = null
+    private var uibcSender: UibcSender? = null
 
     var onSessionEstablished: ((sessionId: String) -> Unit)? = null
     var onStreamStart: ((rtpPort: Int) -> Unit)? = null
@@ -132,11 +135,19 @@ class WfdSessionHandler(
                 val requested = msg.substringAfter("\r\n\r\n", "").lineSequence()
                     .map { it.substringBefore(':').trim().lowercase(java.util.Locale.ROOT) }
                     .filter { it.isNotEmpty() }.toSet()
+                if (msg.contains("uibc", ignoreCase = true)) {
+                    Timber.i("WFD: M3 request body = %s",
+                        msg.substringAfter("\r\n\r\n", "").replace("\r\n", " | ").take(400))
+                }
                 if (requested.any { it.startsWith("wfd") || it == "microsoft_custom_video_formats" })
                     sendCapabilities(cseq, requested)  // M3
                 else sendOk(cseq)                                 // keep-alive
             }
             "SET_PARAMETER" -> {
+                if (msg.contains("uibc", ignoreCase = true)) {
+                    Timber.i("WFD: M4 UIBC body = %s",
+                        msg.substringAfter("\r\n\r\n", "").replace("\r\n", " | "))
+                }
                 // M4 里的 presentation URL 有两个值（"<url> none"），只能取第一个，
                 // 否则拼出的 SETUP 请求行会多一段，Source 判定畸形直接断链。
                 param(msg, "wfd_presentation_URL")
@@ -170,6 +181,17 @@ class WfdSessionHandler(
                 }
                 param(msg, "wfd_audio_codecs")?.let {
                     Timber.i("WFD: source selected audio codec = $it")
+                }
+                param(msg, "wfd_uibc_capability")?.let { capability ->
+                    Regex("port=(\\d+)").find(capability)?.groupValues?.get(1)
+                        ?.toIntOrNull()?.let { port ->
+                            sourceUibcPort = port
+                            Timber.i("WFD: source UIBC port = %d", port)
+                        }
+                }
+                param(msg, "wfd_uibc_setting")?.let { setting ->
+                    Timber.i("WFD: UIBC setting = %s", setting)
+                    if (setting.contains("enable", ignoreCase = true)) connectUibc()
                 }
                 sendOk(cseq)
                 if (msg.contains("wfd_trigger_method: SETUP")) sendSetup()      // M5 → M6
@@ -251,16 +273,38 @@ class WfdSessionHandler(
         }
         if (mode != null) Timber.i("WFD: custom receive declaration = %dx%d p%d", mode.width, mode.height, mode.fps)
         val body = buildString {
-            wfdVideoCapabilityLines(requested, mode).forEach { append(it).append("\r\n") }
-            append("wfd_audio_codecs: $AUDIO_CODECS\r\n")
+            val useR2 = "wfd2_video_formats" in requested
+            if (useR2) {
+                // R2: native=CEA index 8 (1080p60), H.264, CHP, level 5.1, 12-hex CEA bitmap.
+                append("wfd2_video_formats: 20 01 02 0040 0000000001C0 000000000000 000000000000 00 0000 0000 00 00\r\n")
+                append("wfd2_audio_codecs: $AUDIO_CODECS\r\n")
+            } else {
+                wfdVideoCapabilityLines(requested, mode).forEach { append(it).append("\r\n") }
+                append("wfd_audio_codecs: $AUDIO_CODECS\r\n")
+            }
             // 关键：告诉 Source 往哪个 UDP 端口发 RTP，缺了这项收不到画面
             append("wfd_client_rtp_ports: RTP/AVP/UDP;unicast $rtpPort 0 mode=play\r\n")
             append("wfd_content_protection: none\r\n")
-            append("wfd_display_edid: none\r\n")
-            append("wfd_uibc_capability: none\r\n")
+            // EDID generated from the device's real display (mode/size/refresh/name).
+            val edid = WfdDisplayEdid.toM3Value(context)
+            if (edid != null) {
+                append("wfd_display_edid: $edid\r\n")
+            } else {
+                append("wfd_display_edid: none\r\n")
+            }
+            if (uibcEnabled) {
+                // UIBC 方向：Source 在 M4 里提供它监听的 TCP 端口，Sink 主动连过去发送输入。
+                // Sink 自己的能力里 port 必须为 none，不能填自己的监听端口。
+                append("wfd_uibc_capability: input_category_list=GENERIC,HIDC;generic_cap_list=Mouse,SingleTouch;hidc_cap_list=Keyboard/USB,Mouse/USB;port=none\r\n")
+            } else {
+                append("wfd_uibc_capability: none\r\n")
+            }
             append("wfd_connector_type: 05\r\n")
         }
         val bytes = body.toByteArray(StandardCharsets.UTF_8)
+        if (uibcEnabled) {
+            Timber.i("WFD: M3 body = %s", body.replace("\r\n", " | ").take(500))
+        }
         send(
             "RTSP/1.0 200 OK\r\n" +
                 "CSeq: $cseq\r\n" +
@@ -289,8 +333,28 @@ class WfdSessionHandler(
         context.startActivity(intent)
     }
 
+    /** Source 在 M4 里开启 UIBC 后，Sink 主动连到 Source 的 UIBC 端口。 */
+    private fun connectUibc() {
+        if (uibcSender?.connected == true) return
+        val port = sourceUibcPort ?: run {
+            Timber.w("WFD: UIBC enable without a source port")
+            return
+        }
+        val host = socket.inetAddress?.hostAddress ?: return
+        val sender = UibcSender(host, port)
+        if (sender.connect()) {
+            uibcSender = sender
+            UibcBridge.sender = sender
+            Timber.i("WFD: UIBC HIDC ready (%s:%d)", host, port)
+        }
+    }
+
     fun close() {
         playing = false
+        val sender = uibcSender
+        uibcSender = null
+        runCatching { sender?.close() }
+        if (UibcBridge.sender === sender) UibcBridge.sender = null
         try {
             socket.close()
         } catch (e: Exception) {

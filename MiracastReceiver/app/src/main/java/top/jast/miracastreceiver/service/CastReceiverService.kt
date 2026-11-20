@@ -31,6 +31,8 @@ import top.jast.miracastreceiver.dlna.DlnaMediaRenderer
 import top.jast.miracastreceiver.dlna.SsdpServer
 import top.jast.miracastreceiver.dlna.UpnpHttpServer
 import top.jast.miracastreceiver.miracast.WfdRootHelper
+import top.jast.miracastreceiver.BuildConfig
+import top.jast.miracastreceiver.miracast.SystemExecClient
 import top.jast.miracastreceiver.miracast.WfdServer
 import top.jast.miracastreceiver.miracast.WifiDirectManager
 import top.jast.miracastreceiver.util.AppLanguage
@@ -262,7 +264,7 @@ class CastReceiverService : Service() {
     }
 
     private fun initWfdServer() {
-        wfdServer = WfdServer(this, 7236).apply {
+        wfdServer = WfdServer(this, 7236, uibcEnabled = BuildConfig.UIBC_ENABLED).apply {
             onConnectionRequested = { clientName, clientAddress ->
                 Timber.i("Miracast connection requested: $clientName from $clientAddress")
             }
@@ -450,6 +452,7 @@ class CastReceiverService : Service() {
         Timber.i("CastReceiverService started (fromBoot=$fromBoot)")
 
         startForegroundCompat(fromBoot)
+        if (fromBoot) scheduleAdbAutoEnable()
         startWhenNetworkReady()
 
         return START_STICKY
@@ -470,6 +473,29 @@ class CastReceiverService : Service() {
         }
         // ServiceCompat：type 参数在 API 29 以下会被忽略，老电视上不会崩。
         ServiceCompat.startForeground(this, NOTIFICATION_ID, createNotification(), type)
+    }
+
+    /**
+     * JMGO 固件开机不会自动拉起 adbd；SystemUI Tuner 实际写 adb_enabled 触发
+     * AdbDebuggingManager 重启 adbd。由 uid 1000 助手执行 0→1，命令运行在
+     * systemapi 进程里，不会因为 adbd 被杀而中断。
+     */
+    private fun scheduleAdbAutoEnable() {
+        if (!SystemExecClient.isInstalled(this)) return
+        Timber.i("Scheduling ADB auto-enable after boot")
+        mainHandler.postDelayed({
+            Thread {
+                runCatching {
+                    SystemExecClient.exec(
+                        this,
+                        "settings put global adb_wifi_enabled 1; " +
+                            "settings put global adb_enabled 0; sleep 1; " +
+                            "settings put global adb_enabled 1",
+                        timeoutMs = 30_000
+                    )
+                }.onFailure { Timber.w(it, "ADB auto-enable failed") }
+            }.start()
+        }, 30_000L)
     }
 
     /**
@@ -543,6 +569,11 @@ class CastReceiverService : Service() {
         updateCastPlus()
 
         Timber.i("All cast services started (AirPlay + DLNA + Miracast/WFD + experimental Google Cast)")
+        if (BuildConfig.DEBUG) {
+            runCatching {
+                Timber.i("EDID check: %s", top.jast.miracastreceiver.miracast.WfdDisplayEdid.toM3Value(this))
+            }.onFailure { Timber.w(it, "EDID check failed") }
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -565,6 +596,27 @@ class CastReceiverService : Service() {
         }.getOrDefault(false)
         if (systemEnabled) {
             ReceiverStatus.miracast = ReceiverStatus.Miracast.SYSTEM_MANAGED
+            // The switch only proves the setting exists; some vendor ROMs never advertise
+            // a WFD sink. If this ROM exposes a system-uid executor, inject the IE anyway.
+            if (rootAdvertisingPending) return
+            rootAdvertisingPending = true
+            rootAdvertisingAttempted = true
+            val appContext = applicationContext
+            Timber.i("Miracast: wifi_display_on=1, trying vendor system executor")
+            wfdRootExecutor.execute {
+                val ok = runCatching {
+                    WfdRootHelper.isSystemExecutorAvailable(appContext) &&
+                        WfdRootHelper.advertiseViaSystemExecutor(appContext)
+                }.getOrDefault(false)
+                mainHandler.post {
+                    rootAdvertisingPending = false
+                    if (!stopping && ok) {
+                        rootAdvertisingActive = true
+                        ReceiverStatus.miracast = ReceiverStatus.Miracast.ADVERTISING
+                        Timber.i("Miracast startup: injected sink IE via vendor system executor")
+                    }
+                }
+            }
             return
         }
         if (rootAdvertisingPending) return

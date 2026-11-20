@@ -20,6 +20,7 @@ import android.graphics.SurfaceTexture
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.view.InputDevice
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.WindowManager
@@ -144,6 +145,55 @@ class PlayerActivity : AppCompatActivity() {
     private lateinit var progressBar: ProgressBar
     private lateinit var tvError: TextView
     private lateinit var tvStreamInfo: TextView
+    private lateinit var tvStats: TextView
+    private var videoFrames = 0
+    private var droppedVideoFrames = 0
+    private var lastMiracastSrc = 0L
+    private var lastMiracastDst = 0L
+    private var lastStatsAt = 0L
+    private val statsHandler = Handler(Looper.getMainLooper())
+    private val statsRunnable = object : Runnable {
+        override fun run() {
+            if (::tvStats.isInitialized) {
+                val uibc = top.jast.miracastreceiver.miracast.UibcBridge.stats()
+                val src = top.jast.miracastreceiver.miracast.MiracastVideoStats.sourceFrames
+                val dst = top.jast.miracastreceiver.miracast.MiracastVideoStats.renderedFrames
+                val nowMs = SystemClock.elapsedRealtime()
+                val dtSec = if (lastStatsAt == 0L) 1.0 else ((nowMs - lastStatsAt) / 1000.0).coerceAtLeast(0.2)
+                val srcFps = ((src - lastMiracastSrc) / dtSec).toInt().coerceAtLeast(0)
+                val dstFps = ((dst - lastMiracastDst) / dtSec).toInt().coerceAtLeast(0)
+                lastStatsAt = nowMs
+                lastMiracastSrc = src
+                lastMiracastDst = dst
+                val age = top.jast.miracastreceiver.miracast.MiracastVideoStats.lastFrameAgeMs()
+                val miracastActive = age in 0..3000
+                val text = buildString {
+                    if (miracastActive) {
+                        append("fps=").append(srcFps).append("/").append(dstFps)
+                        append(" last=").append(age).append("ms")
+                    } else {
+                        append("fps=").append(videoFrames)
+                        append(" drop=").append(droppedVideoFrames)
+                        append(" buf=")
+                            .append(player?.totalBufferedDuration?.coerceAtLeast(0L) ?: 0L)
+                            .append("ms")
+                    }
+                    if (uibc != null) {
+                        append(" | uibc ").append(uibc[0]).append("/s tx ")
+                            .append(uibc[1]).append("/s max ").append(uibc[2]).append("ms")
+                    }
+                    top.jast.miracastreceiver.miracast.RtpReceiver.active?.let { rtp ->
+                        append(" | rtp loss=").append(rtp.packetsLost)
+                            .append(" qdrop=").append(rtp.queueDrops)
+                    }
+                }
+                tvStats.text = text
+            }
+            videoFrames = 0
+            droppedVideoFrames = 0
+            statsHandler.postDelayed(this, 1000)
+        }
+    }
     private lateinit var bufferingIndicator: ProgressBar
 
     private var player: ExoPlayer? = null
@@ -180,6 +230,12 @@ class PlayerActivity : AppCompatActivity() {
     private var lastCropSampleAt = 0L
     private var cropSession = 0
     private var autoRotateToFit = false
+    private var lastMouseX = -1f
+    private var lastMouseY = -1f
+    private var mouseAccX = 0f
+    private var mouseAccY = 0f
+    private var mouseButtonDown = false
+    private var lastLagLogMs = 0L
     /** 镜像旋转用的 TextureView 层：0° 时隐藏，仍走 SurfaceView 保住电视上的性能。 */
     private lateinit var mirrorRotateLayer: FrameLayout
     private lateinit var mirrorRotateTexture: TextureView
@@ -273,8 +329,18 @@ class PlayerActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         autoRotateToFit = top.jast.miracastreceiver.util.AppSettings.isAutoRotateToFit(this)
         setContentView(R.layout.activity_player)
+        // UIBC 反向控制时隐藏投影仪本地鼠标指针，避免与 Windows 指针重叠。
+        runCatching {
+            val nullIcon = android.view.PointerIcon.getSystemIcon(
+                this, android.view.PointerIcon.TYPE_NULL
+            )
+            window?.decorView?.pointerIcon = nullIcon
+            findViewById<View>(android.R.id.content)?.pointerIcon = nullIcon
+        }
 
         initViews()
+        statsHandler.removeCallbacks(statsRunnable)
+        statsHandler.postDelayed(statsRunnable, 1000)
         initPlayer()
         handleIntent(intent)
         val airPlaySubtitles = findViewById<SubtitleView>(R.id.airplay_subtitles)
@@ -307,6 +373,7 @@ class PlayerActivity : AppCompatActivity() {
         progressBar = findViewById(R.id.progress_bar)
         tvError = findViewById(R.id.tv_error)
         tvStreamInfo = findViewById(R.id.tv_stream_info)
+        tvStats = findViewById(R.id.tv_stats)
         bufferingIndicator = findViewById(R.id.buffering_indicator)
         btnRotateOverlay = findViewById(R.id.btn_rotate_overlay)
         btnRotateOverlay.setOnClickListener {
@@ -388,6 +455,16 @@ class PlayerActivity : AppCompatActivity() {
             .setLoadControl(loadControl)
             .build()
             .apply {
+                setVideoFrameMetadataListener { _, _, _, _ -> videoFrames++ }
+                addAnalyticsListener(object : AnalyticsListener {
+                    override fun onDroppedVideoFrames(
+                        eventTime: AnalyticsListener.EventTime,
+                        droppedFrames: Int,
+                        elapsedMs: Long
+                    ) {
+                        droppedVideoFrames += droppedFrames
+                    }
+                })
                 playbackParameters?.let { this.playbackParameters = it }
                 volume?.let { this.volume = it }
                 addListener(object : Player.Listener {
@@ -587,7 +664,58 @@ class PlayerActivity : AppCompatActivity() {
         }
     }
 
+    override fun onGenericMotionEvent(event: MotionEvent): Boolean {
+        if (event.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE) {
+            when (event.actionMasked) {
+                MotionEvent.ACTION_MOVE, MotionEvent.ACTION_HOVER_MOVE -> {
+                    logDispatchLag(event)
+                    if (mouseButtonDown) return true
+                    var fdx = event.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
+                    var fdy = event.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
+                    if (fdx == 0f && fdy == 0f) {
+                        // Fallback for devices that only report absolute positions.
+                        if (lastMouseX >= 0f) {
+                            fdx = event.x - lastMouseX
+                            fdy = event.y - lastMouseY
+                        }
+                        lastMouseX = event.x
+                        lastMouseY = event.y
+                    }
+                    // Keep sub-pixel deltas so slow movement is not lost.
+                    mouseAccX += fdx
+                    mouseAccY += fdy
+                    val dx = kotlin.math.round(mouseAccX).toInt()
+                    val dy = kotlin.math.round(mouseAccY).toInt()
+                    mouseAccX -= dx
+                    mouseAccY -= dy
+                    if (dx != 0 || dy != 0) {
+                        top.jast.miracastreceiver.miracast.UibcBridge.mouse(dx, dy)
+                    }
+                }
+                MotionEvent.ACTION_SCROLL -> {
+                    val v = event.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                    if (v != 0f) top.jast.miracastreceiver.miracast.UibcBridge.wheel(if (v > 0) 1 else -1)
+                }
+                MotionEvent.ACTION_BUTTON_PRESS -> {
+                    mouseButtonDown = true
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(event.actionButton, true)
+                }
+                MotionEvent.ACTION_BUTTON_RELEASE -> {
+                    mouseButtonDown = false
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(event.actionButton, false)
+                }
+            }
+        }
+        return super.onGenericMotionEvent(event)
+    }
+
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // 遥控器/键盘按键回传到 Source（UIBC HIDC）
+        if (event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP) {
+            top.jast.miracastreceiver.miracast.UibcBridge.key(
+                event.keyCode, event.action == KeyEvent.ACTION_DOWN
+            )
+        }
         // 镜像/图片模式：遥控器按 OK 或上下键先呼出旋转按钮并给它焦点，再按 OK 就旋转
         if (event.action == KeyEvent.ACTION_DOWN && !isDialogShowing && usesRotateOverlay() &&
             event.keyCode in ROTATE_REVEAL_KEYS) {
@@ -1519,7 +1647,77 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // 镜像/图片模式没有控制条，点一下屏幕任意位置呼出旋转按钮
+    private fun logDispatchLag(event: MotionEvent) {
+        val now = android.os.SystemClock.uptimeMillis()
+        val lag = now - event.eventTime
+        if (lag > 30 && now - lastLagLogMs > 2000) {
+            lastLagLogMs = now
+            android.util.Log.w("UibcMouse", "dispatch lag ${lag}ms action=${event.actionMasked}")
+        }
+    }
+
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // A touchscreen sink sends absolute touch input to the source; the local
+        // UI still receives the event so playback controls keep working.
+        if (top.jast.miracastreceiver.miracast.UibcBridge.sender != null &&
+            ev.getToolType(0) == MotionEvent.TOOL_TYPE_FINGER
+        ) {
+            val w = window.decorView.width.coerceAtLeast(1)
+            val h = window.decorView.height.coerceAtLeast(1)
+            val nx = (ev.x / w * 32767f).toInt().coerceIn(0, 32767)
+            val ny = (ev.y / h * 32767f).toInt().coerceIn(0, 32767)
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE ->
+                    top.jast.miracastreceiver.miracast.UibcBridge.touch(nx, ny, true)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL ->
+                    top.jast.miracastreceiver.miracast.UibcBridge.touch(nx, ny, false)
+            }
+        }
+        // A mouse with a button held is delivered as touch (DOWN/MOVE/UP), not
+        // as generic motion. Forward that drag path to UIBC as well.
+        if (top.jast.miracastreceiver.miracast.UibcBridge.sender != null &&
+            ev.source and InputDevice.SOURCE_MOUSE == InputDevice.SOURCE_MOUSE
+        ) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    mouseButtonDown = true
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(
+                        MotionEvent.BUTTON_PRIMARY, true
+                    )
+                    lastMouseX = ev.x
+                    lastMouseY = ev.y
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    logDispatchLag(ev)
+                    var fdx = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_X)
+                    var fdy = ev.getAxisValue(MotionEvent.AXIS_RELATIVE_Y)
+                    if (fdx == 0f && fdy == 0f) {
+                        if (lastMouseX >= 0f) {
+                            fdx = ev.x - lastMouseX
+                            fdy = ev.y - lastMouseY
+                        }
+                        lastMouseX = ev.x
+                        lastMouseY = ev.y
+                    }
+                    mouseAccX += fdx
+                    mouseAccY += fdy
+                    val dx = kotlin.math.round(mouseAccX).toInt()
+                    val dy = kotlin.math.round(mouseAccY).toInt()
+                    mouseAccX -= dx
+                    mouseAccY -= dy
+                    if (dx != 0 || dy != 0) {
+                        top.jast.miracastreceiver.miracast.UibcBridge.mouse(dx, dy)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    mouseButtonDown = false
+                    top.jast.miracastreceiver.miracast.UibcBridge.mouseButton(
+                        MotionEvent.BUTTON_PRIMARY, false
+                    )
+                }
+            }
+            return true
+        }
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) showRotateButton(focus = false)
         return super.dispatchTouchEvent(ev)
     }
@@ -1667,6 +1865,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        statsHandler.removeCallbacks(statsRunnable)
         surfacePublisherStopped = true
         screenOnSessionActive = false
         isPlayerVisible = false
