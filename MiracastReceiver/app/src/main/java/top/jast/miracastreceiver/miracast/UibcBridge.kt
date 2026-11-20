@@ -20,4 +20,11 @@ object UibcBridge {
     fun wheel(delta: Int) {
         sender?.sendWheel(delta)
     }
+
+    fun touch(x: Int, y: Int, down: Boolean) {
+        sender?.sendTouch(x, y, down)
+    }
+
+    /** [events, frames, maxLatencyMs] for the last interval, or null when UIBC is off. */
+    fun stats(): IntArray? = sender?.takeStats()
 }

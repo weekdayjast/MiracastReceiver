@@ -57,7 +57,7 @@ class RtpReceiver(
     private data class Payload(val sequence: Int, val data: ByteArray, val arrivedMs: Long)
     private val payloadQueue = ArrayBlockingQueue<Payload>(256)
     private val decoderStopped = CountDownLatch(1)
-    @Volatile private var queueDrops = 0L
+    @Volatile var queueDrops = 0L
 
     @Volatile
     var packetsLost = 0L

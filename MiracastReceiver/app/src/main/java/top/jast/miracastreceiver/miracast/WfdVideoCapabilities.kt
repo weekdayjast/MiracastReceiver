@@ -68,7 +68,7 @@ internal fun wfdCustomVideoMode(context: Context, extended: Boolean): WfdCustomV
 
 /** Only negotiate extensions the peer explicitly requested; keep the legacy CEA fallback. */
 internal fun wfdVideoCapabilityLines(requested: Set<String>, mode: WfdCustomVideoMode?): List<String> {
-    val lines = mutableListOf("wfd_video_formats: 00 00 02 10 000001C0 00000000 00000000 00 0000 0000 00 none none")
+    val lines = mutableListOf("wfd_video_formats: 00 00 02 40 000001C0 00000000 00000000 00 0000 0000 00 none none")
     if ("wfdx_video_formats" in requested && mode != null) lines += "wfdx_video_formats: ${mode.extendedFormats()}"
     if ("microsoft_custom_video_formats" in requested) {
         val usable = mode?.takeIf { "wfdx_video_formats" in requested || it.levelBit <= 0x10 }

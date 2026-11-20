@@ -11,7 +11,7 @@ val targetAbis = when {
 }
 val buildUniversalApk = targetAbis.size > 1
 val useUxPlay = providers.gradleProperty("useUxPlay").isPresent
-val uibcEnabled = providers.gradleProperty("uibc").orNull?.toBoolean() ?: false
+val uibcEnabled = providers.gradleProperty("uibc").orNull?.toBoolean() ?: true
 if (useUxPlay) require(targetAbis.all { it in listOf("armeabi-v7a", "arm64-v8a") }) {
     "UxPlay libraries are available for ARM32 and ARM64 only"
 }

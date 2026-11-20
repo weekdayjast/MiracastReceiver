@@ -273,12 +273,25 @@ class WfdSessionHandler(
         }
         if (mode != null) Timber.i("WFD: custom receive declaration = %dx%d p%d", mode.width, mode.height, mode.fps)
         val body = buildString {
-            wfdVideoCapabilityLines(requested, mode).forEach { append(it).append("\r\n") }
-            append("wfd_audio_codecs: $AUDIO_CODECS\r\n")
+            val useR2 = "wfd2_video_formats" in requested
+            if (useR2) {
+                // R2: native=CEA index 8 (1080p60), H.264, CHP, level 5.1, 12-hex CEA bitmap.
+                append("wfd2_video_formats: 20 01 02 0040 0000000001C0 000000000000 000000000000 00 0000 0000 00 00\r\n")
+                append("wfd2_audio_codecs: $AUDIO_CODECS\r\n")
+            } else {
+                wfdVideoCapabilityLines(requested, mode).forEach { append(it).append("\r\n") }
+                append("wfd_audio_codecs: $AUDIO_CODECS\r\n")
+            }
             // 关键：告诉 Source 往哪个 UDP 端口发 RTP，缺了这项收不到画面
             append("wfd_client_rtp_ports: RTP/AVP/UDP;unicast $rtpPort 0 mode=play\r\n")
             append("wfd_content_protection: none\r\n")
-            append("wfd_display_edid: none\r\n")
+            // EDID generated from the device's real display (mode/size/refresh/name).
+            val edid = WfdDisplayEdid.toM3Value(context)
+            if (edid != null) {
+                append("wfd_display_edid: $edid\r\n")
+            } else {
+                append("wfd_display_edid: none\r\n")
+            }
             if (uibcEnabled) {
                 // UIBC 方向：Source 在 M4 里提供它监听的 TCP 端口，Sink 主动连过去发送输入。
                 // Sink 自己的能力里 port 必须为 none，不能填自己的监听端口。

@@ -44,26 +44,46 @@ class UibcSender(private val host: String, private val port: Int) {
             0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38, 0x15, 0x81.toByte(), 0x25,
             0x7F, 0x75, 0x08, 0x95.toByte(), 0x03, 0x81.toByte(), 0x06, 0xC0.toByte(), 0xC0.toByte()
         )
+
+        /** Absolute mouse for touchscreens: 6-byte report, X/Y 0..32767. */
+        private val MOUSE_ABSOLUTE_DESCRIPTOR = byteArrayOf(
+            0x05, 0x01, 0x09, 0x02, 0xA1.toByte(), 0x01, 0x09, 0x01, 0xA1.toByte(), 0x00,
+            0x05, 0x09, 0x19, 0x01, 0x29, 0x03, 0x15, 0x00, 0x25, 0x01, 0x95.toByte(), 0x03,
+            0x75, 0x01, 0x81.toByte(), 0x02, 0x95.toByte(), 0x01, 0x75, 0x05, 0x81.toByte(), 0x01,
+            0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x15, 0x00, 0x26, 0xFF.toByte(), 0x7F,
+            0x75, 0x10, 0x95.toByte(), 0x02, 0x81.toByte(), 0x02, 0x09, 0x38, 0x15, 0x81.toByte(),
+            0x25, 0x7F, 0x75, 0x08, 0x95.toByte(), 0x01, 0x81.toByte(), 0x06, 0xC0.toByte(), 0xC0.toByte()
+        )
     }
 
     private var socket: Socket? = null
     private var output: OutputStream? = null
-    private val lock = Any()
+    private val stateLock = Any()
+    private val ioLock = Any()
 
     // Input events arrive on the main thread; socket writes must stay off it
     // and preserve order, so use one background writer.
     private val writer = Executors.newSingleThreadExecutor { r ->
         Thread(r, "uibc-writer").apply { isDaemon = true }
     }
+    // Mouse traffic has its own thread so keyboard/button writes cannot add jitter.
+    private val mouseWriter = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "uibc-mouse").apply { isDaemon = true }
+    }
 
     private var modifiers = 0
     private val keys = IntArray(6) { 0 }
     private var buttons = 0
+    private var absoluteMode = false
     private val mouseLock = Any()
     private var pendingDx = 0
     private var pendingDy = 0
     private var pendingWheel = 0
     private var mouseFlushInFlight = false
+    private var statEvents = 0
+    private var statFrames = 0
+    private var statMaxLatencyMs = 0L
+    private var statPendingSince = 0L
 
     @Volatile
     var connected = false
@@ -74,10 +94,12 @@ class UibcSender(private val host: String, private val port: Int) {
         return try {
             val s = Socket()
             s.tcpNoDelay = true
+            runCatching { s.trafficClass = 0x10 } // IPTOS_LOWDELAY
             s.connect(InetSocketAddress(host, port), 3000)
             socket = s
             output = s.getOutputStream()
             connected = true
+            absoluteMode = false
             Timber.i("UIBC: connected to %s:%d", host, port)
             // The source needs the HID report descriptors before input reports.
             sendHidc(HID_TYPE_KEYBOARD, USAGE_DESCRIPTOR, KEYBOARD_DESCRIPTOR, direct = true)
@@ -147,24 +169,29 @@ class UibcSender(private val host: String, private val port: Int) {
         return sb.toString()
     }
 
-    fun close() {        connected = false
-        runCatching { output?.close() }
-        runCatching { socket?.close() }
-        output = null
-        socket = null
-        synchronized(lock) {
+    fun close() {
+        connected = false
+        synchronized(ioLock) {
+            runCatching { output?.close() }
+            runCatching { socket?.close() }
+            output = null
+            socket = null
+        }
+        synchronized(stateLock) {
             modifiers = 0
             keys.fill(0)
             buttons = 0
         }
+        synchronized(mouseLock) { absoluteMode = false }
         writer.shutdownNow()
+        mouseWriter.shutdownNow()
     }
 
     fun sendKey(androidKeyCode: Int, down: Boolean) {
         if (!connected) return
         if (isModifier(androidKeyCode)) {
             val bit = modifierBit(androidKeyCode)
-            synchronized(lock) {
+            synchronized(stateLock) {
                 modifiers = if (down) modifiers or bit else modifiers and bit.inv()
             }
             sendKeyboardReport()
@@ -172,7 +199,7 @@ class UibcSender(private val host: String, private val port: Int) {
         }
         val usage = hidUsage(androidKeyCode)
         if (usage == 0) return
-        synchronized(lock) {
+        synchronized(stateLock) {
             if (down) {
                 if (!keys.contains(usage)) {
                     val slot = keys.indexOf(0)
@@ -188,6 +215,10 @@ class UibcSender(private val host: String, private val port: Int) {
     fun sendMouse(dx: Int, dy: Int, wheel: Int = 0) {
         if (!connected) return
         synchronized(mouseLock) {
+            if (pendingDx == 0 && pendingDy == 0 && pendingWheel == 0) {
+                statPendingSince = System.nanoTime()
+            }
+            statEvents++
             pendingDx += dx
             pendingDy += dy
             pendingWheel += wheel
@@ -204,7 +235,7 @@ class UibcSender(private val host: String, private val port: Int) {
      */
     private fun scheduleMouseFlush() {
         try {
-            writer.execute {
+            mouseWriter.execute {
                 val delta = synchronized(mouseLock) {
                     val d = pendingDx.coerceIn(-127, 127)
                     val e = pendingDy.coerceIn(-127, 127)
@@ -215,6 +246,15 @@ class UibcSender(private val host: String, private val port: Int) {
                     intArrayOf(d, e, w)
                 }
                 sendMouseReport(delta[0], delta[1], delta[2], direct = true)
+                val now = System.nanoTime()
+                synchronized(mouseLock) {
+                    statFrames++
+                    if (statPendingSince != 0L) {
+                        val latencyMs = (now - statPendingSince) / 1_000_000
+                        if (latencyMs > statMaxLatencyMs) statMaxLatencyMs = latencyMs
+                        statPendingSince = 0L
+                    }
+                }
                 val more = synchronized(mouseLock) {
                     if (pendingDx != 0 || pendingDy != 0 || pendingWheel != 0) {
                         true
@@ -249,7 +289,7 @@ class UibcSender(private val host: String, private val port: Int) {
             else -> 0
         }
         if (bit == 0) return
-        synchronized(lock) { buttons = if (down) buttons or bit else buttons and bit.inv() }
+        synchronized(stateLock) { buttons = if (down) buttons or bit else buttons and bit.inv() }
         sendMouseReport(0, 0, 0, direct = false)
     }
 
@@ -258,9 +298,49 @@ class UibcSender(private val host: String, private val port: Int) {
         sendMouse(0, 0, delta)
     }
 
+    /**
+     * Touch input from a touchscreen sink: absolute position 0..32767 on the
+     * source's primary display. Switches the HID mouse descriptor to absolute
+     * mode on first use; mouse remotes keep using the relative descriptor.
+     */
+    fun sendTouch(x: Int, y: Int, down: Boolean) {
+        if (!connected) return
+        val cx = x.coerceIn(0, 32767)
+        val cy = y.coerceIn(0, 32767)
+        try {
+            mouseWriter.execute {
+                synchronized(mouseLock) {
+                    statEvents++
+                    if (!absoluteMode) {
+                        absoluteMode = true
+                        sendHidc(HID_TYPE_MOUSE, USAGE_DESCRIPTOR, MOUSE_ABSOLUTE_DESCRIPTOR, direct = true)
+                    }
+                    val report = byteArrayOf(
+                        (if (down) 1 else 0).toByte(),
+                        (cx and 0xff).toByte(), ((cx shr 8) and 0xff).toByte(),
+                        (cy and 0xff).toByte(), ((cy shr 8) and 0xff).toByte(),
+                        0
+                    )
+                    sendHidc(HID_TYPE_MOUSE, USAGE_INPUT_REPORT, report, direct = true)
+                    statFrames++
+                }
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    /** Returns [events, frames, maxLatencyMs] since the previous call. */
+    fun takeStats(): IntArray = synchronized(mouseLock) {
+        val result = intArrayOf(statEvents, statFrames, statMaxLatencyMs.toInt())
+        statEvents = 0
+        statFrames = 0
+        statMaxLatencyMs = 0L
+        result
+    }
+
     private fun sendKeyboardReport() {
         val report = ByteArray(8)
-        synchronized(lock) {
+        synchronized(stateLock) {
             report[0] = modifiers.toByte()
             for (i in keys.indices) report[2 + i] = keys[i].toByte()
         }
@@ -296,7 +376,7 @@ class UibcSender(private val host: String, private val port: Int) {
     }
 
     private fun writeFrame(header: ByteArray, payload: ByteArray) {
-        synchronized(lock) {
+        synchronized(ioLock) {
             try {
                 output?.write(header)
                 output?.write(payload)

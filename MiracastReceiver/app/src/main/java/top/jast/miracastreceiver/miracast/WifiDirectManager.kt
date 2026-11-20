@@ -106,11 +106,21 @@ class WifiDirectManager(
         try {
             // 尝试使用反射设置 WFD Info（需要系统权限，但值得一试）
             val wfdInfoClass = Class.forName("android.net.wifi.p2p.WifiP2pWfdInfo")
-            val wfdInfo = wfdInfoClass.newInstance()
+            val wfdInfo = wfdInfoClass.getDeclaredConstructor().newInstance()
 
-            // setWfdEnabled(true)
-            val setWfdEnabledMethod = wfdInfoClass.getMethod("setWfdEnabled", Boolean::class.java)
-            setWfdEnabledMethod.invoke(wfdInfo, true)
+            // Android 14 and older use setWfdEnabled; Android 16 renamed it to setEnabled.
+            val enabled = runCatching {
+                wfdInfoClass.getMethod("setEnabled", Boolean::class.javaPrimitiveType)
+                    .invoke(wfdInfo, true)
+                true
+            }.getOrElse {
+                runCatching {
+                    wfdInfoClass.getMethod("setWfdEnabled", Boolean::class.javaPrimitiveType)
+                        .invoke(wfdInfo, true)
+                    true
+                }.getOrDefault(false)
+            }
+            if (!enabled) Timber.w("WFD: neither setEnabled nor setWfdEnabled exists")
 
             // setDeviceType(WFD_SOURCE = 0)  // 实际上我们是 SINK，但先尝试设置
             // 注意：PRIMARY_SINK = 1, SECONDARY_SINK = 2, SOURCE = 0
@@ -129,13 +139,22 @@ class WifiDirectManager(
             val setMaxThroughputMethod = wfdInfoClass.getMethod("setMaxThroughput", Int::class.java)
             setMaxThroughputMethod.invoke(wfdInfo, 50)
 
-            // 调用 WifiP2pManager.setWFDInfo()
-            val setWFDInfoMethod = WifiP2pManager::class.java.getMethod(
-                "setWFDInfo",
-                WifiP2pManager.Channel::class.java,
-                wfdInfoClass,
-                WifiP2pManager.ActionListener::class.java
-            )
+            // 调用 WifiP2pManager.setWFDInfo()；Android 16 上方法名是 setWfdInfo。
+            val setWFDInfoMethod = runCatching {
+                WifiP2pManager::class.java.getMethod(
+                    "setWFDInfo",
+                    WifiP2pManager.Channel::class.java,
+                    wfdInfoClass,
+                    WifiP2pManager.ActionListener::class.java
+                )
+            }.getOrElse {
+                WifiP2pManager::class.java.getMethod(
+                    "setWfdInfo",
+                    WifiP2pManager.Channel::class.java,
+                    wfdInfoClass,
+                    WifiP2pManager.ActionListener::class.java
+                )
+            }
 
             setWFDInfoMethod.invoke(manager, ch, wfdInfo, object : WifiP2pManager.ActionListener {
                 override fun onSuccess() {

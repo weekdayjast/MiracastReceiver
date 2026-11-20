@@ -65,6 +65,8 @@ class MiracastVideoRenderer(
         val now = android.os.SystemClock.elapsedRealtime()
         if (statsStartMs == 0L) { statsStartMs = now; firstPtsUs = ptsUs }
         sourceFrames++
+        MiracastVideoStats.onSource()
+        MiracastVideoStats.renderedFrames = decoder?.framesReleased ?: 0
         if (now - lastStatsMs >= 2_000) {
             lastStatsMs = now
             Timber.i("Miracast video stats: units=%d, queued=%d, rendered=%d, sourceMs=%d, wallMs=%d, inputStalls=%d, waitKey=%s",
