@@ -1,5 +1,6 @@
 ﻿package top.jast.miracastreceiver.airplay
 
+import top.jast.miracastreceiver.service.PlaybackSessions
 import android.content.Context
 import top.jast.miracastreceiver.BuildConfig
 import android.view.Surface
@@ -92,7 +93,8 @@ class AirPlayReceiver(
     /** Pairing PIN to show ([pin]) or hide (null) on the TV during SRP pair-setup. */
     private val onPinChanged: (pin: String?) -> Unit = {},
     /** A real session end, independent of mDNS registration state. Dispatched on Main. */
-    private val onSessionEnded: () -> Unit = {}
+    private val onSessionEnded: (Long) -> Unit = {},
+    private val onPlaybackRequested: () -> Long = { -1L }
 ) {
 
     // Persistent store of paired controllers (for PIN access control / pair-verify).
@@ -101,9 +103,20 @@ class AirPlayReceiver(
     // SupervisorJob: child coroutine failures don't propagate to siblings.
     private val job = SupervisorJob()
     private val scope = CoroutineScope(Dispatchers.IO + job)
+    @Volatile private var playbackSessionId = -1L
+
+    private fun requestPlayback(): Boolean {
+        playbackSessionId = onPlaybackRequested()
+        return playbackSessionId != -1L
+    }
+
     private val lifecycle = AirPlayLifecycle(
         onStateChanged = { state -> dispatchState(state) },
-        onSessionEnded = { scope.launch(Dispatchers.Main) { onSessionEnded() } }
+        onSessionEnded = {
+            val ended = playbackSessionId
+            playbackSessionId = -1L
+            scope.launch(Dispatchers.Main) { onSessionEnded(ended) }
+        }
     )
 
     // Child components
@@ -164,6 +177,7 @@ class AirPlayReceiver(
                 onAdvertising = { name -> onActualNameRegistered(name); emitState(AirPlayState.ADVERTISING) },
                 onError = { emitState(AirPlayState.ERROR) },
                 initialResolution = mirrorResolution,
+                onPlaybackRequested = ::requestPlayback,
             ).also { it.start() }
             return
         }
@@ -219,10 +233,12 @@ class AirPlayReceiver(
     fun sendRemoteCommand(command: String) = dacpClient.sendCommand(command)
 
     fun disconnectSender() {
+        playbackSessionId = -1L
         uxPlayReceiver?.let { it.disconnectSender(); return }
-        scope.launch {
-            rtspHandler?.disconnectSender()
-        }
+        rtspHandler?.disconnectSender()
+        // The control socket closing is asynchronous; release local sound and
+        // decoders now, before the next protocol starts its pipeline.
+        releaseMediaComponents()
     }
 
     /** True once a sender has advertised DACP reverse-control (so the TV remote can drive playback). */
@@ -330,8 +346,9 @@ class AirPlayReceiver(
         Logger.i("Streaming started — video=${session.hasVideo} audio=${session.hasAudio} " +
                  "audioOnly=${session.isAudioOnly}")
 
-        scope.launch {
+        scope.launch(Dispatchers.Main) {
             try {
+                if (!requestPlayback()) return@launch
                 if (session.hasVideo) startVideoDecoder(session)
                 if (session.hasAudio) startAudioPlayer(session)
                 // Legacy (SDP) session: reflect its stream kinds into now-playing state so an
@@ -357,7 +374,11 @@ class AirPlayReceiver(
      * Releases media components and re-advertises so the device reappears
      * in sender pickers immediately.
      */
-    private fun onStreamingStopped() {
+    private fun onStreamingStopped() = PlaybackSessions.onMain {
+        onStreamingStoppedInternal()
+    }
+
+    private fun onStreamingStoppedInternal() {
         if (urlVideoPlayer != null) {
             // 镜像中全屏视频切换为视频投送后，iPhone 会 TEARDOWN 镜像流（甚至断开控制连接），
             // 但视频由电视独立播放，不能跟着停。只释放镜像相关资源，视频结束时再完整收尾。
@@ -480,13 +501,20 @@ class AirPlayReceiver(
      * channel (macOS connects to it), and switch the UI to the streaming surface.
      * @return the event channel's TCP port.
      */
-    private fun startMirrorKeys(
+    private fun startMirrorKeys(aesKey: ByteArray, ecdhSecret: ByteArray, aesIv: ByteArray,
+        remoteAddress: java.net.InetAddress, senderTimingPort: Int): Pair<Int, Int> =
+        PlaybackSessions.onMain {
+            startMirrorKeysInternal(aesKey, ecdhSecret, aesIv, remoteAddress, senderTimingPort)
+        }
+
+    private fun startMirrorKeysInternal(
         aesKey: ByteArray,
         ecdhSecret: ByteArray,
         aesIv: ByteArray,
         remoteAddress: java.net.InetAddress,
         senderTimingPort: Int,
     ): Pair<Int, Int> {
+        if (!requestPlayback()) return 0 to 0
         mirrorAesKey = aesKey
         mirrorEcdhSecret = ecdhSecret
         mirrorAesIv = aesIv
@@ -521,7 +549,12 @@ class AirPlayReceiver(
      * Mirror SETUP msg 2: start the data-stream server for the requested stream.
      * @return the data server's TCP port (macOS connects here to send H.264).
      */
-    private fun startMirrorStream(streamConnectionId: Long): Int {
+    private fun startMirrorStream(streamConnectionId: Long): Int =
+        PlaybackSessions.onMain {
+            if (playbackSessionId == -1L) 0 else startMirrorStreamInternal(streamConnectionId)
+        }
+
+    private fun startMirrorStreamInternal(streamConnectionId: Long): Int {
         val aesKey = mirrorAesKey ?: run { Logger.e("mirror stream start before keys set"); return 0 }
         val ecdhSecret = mirrorEcdhSecret ?: return 0
         mirrorServer?.stop()
@@ -533,7 +566,13 @@ class AirPlayReceiver(
     }
 
     /** Mirror SETUP audio stream (type 96): start the AAC-ELD / AAC-LC / ALAC audio server. @return (dataPort, controlPort). */
-    private fun startMirrorAudio(sampleRate: Int, channels: Int, codecType: Int, framesPerPacket: Int): Pair<Int, Int> {
+    private fun startMirrorAudio(sampleRate: Int, channels: Int, codecType: Int, framesPerPacket: Int): Pair<Int, Int> =
+        PlaybackSessions.onMain {
+            if (playbackSessionId == -1L) 0 to 0
+            else startMirrorAudioInternal(sampleRate, channels, codecType, framesPerPacket)
+        }
+
+    private fun startMirrorAudioInternal(sampleRate: Int, channels: Int, codecType: Int, framesPerPacket: Int): Pair<Int, Int> {
         val aesKey = mirrorAesKey ?: run { Logger.e("audio start before keys set"); return 0 to 0 }
         val ecdhSecret = mirrorEcdhSecret ?: return 0 to 0
         val aesIv = mirrorAesIv ?: return 0 to 0
@@ -546,7 +585,11 @@ class AirPlayReceiver(
     }
 
     /** Stops ONLY the mirror audio stream (macOS dynamic-stream TEARDOWN) — video keeps running. */
-    private fun stopMirrorAudio() {
+    private fun stopMirrorAudio() = PlaybackSessions.onMain {
+        stopMirrorAudioInternal()
+    }
+
+    private fun stopMirrorAudioInternal() {
         audioServer?.stop()
         audioServer = null
         audioPlaying = false
@@ -556,7 +599,11 @@ class AirPlayReceiver(
     }
 
     /** Stops ONLY the mirror video stream (macOS dynamic-stream TEARDOWN) — audio keeps playing. */
-    private fun stopMirrorVideo() {
+    private fun stopMirrorVideo() = PlaybackSessions.onMain {
+        stopMirrorVideoInternal()
+    }
+
+    private fun stopMirrorVideoInternal() {
         mirrorServer?.stop()
         mirrorServer = null
         videoPlaying = false
@@ -568,7 +615,13 @@ class AirPlayReceiver(
      * AirPlay video URL mode (non-mirroring): show the streaming surface and hand the URL to
      * [AirPlayVideoPlayer], which fetches + plays it via MediaPlayer onto the same Surface.
      */
-    private fun startUrlVideo(url: String, startFraction: Double, startSeconds: Double?, youtubeMlhls: Boolean) {
+    private fun startUrlVideo(url: String, startFraction: Double, startSeconds: Double?, youtubeMlhls: Boolean) =
+        PlaybackSessions.onMain {
+            startUrlVideoInternal(url, startFraction, startSeconds, youtubeMlhls)
+        }
+
+    private fun startUrlVideoInternal(url: String, startFraction: Double, startSeconds: Double?, youtubeMlhls: Boolean) {
+        if (!requestPlayback()) return
         val mirror = mirrorServer
         if (mirror != null) {
             // iOS hands a full-screen video off from a running mirror (e.g. Chrome/Safari native
@@ -612,7 +665,11 @@ class AirPlayReceiver(
      * handed off from a still-running screen mirror, go back to mirroring instead of ending the
      * whole session (previously this tore the mirror down → black TV after leaving full screen).
      */
-    private fun stopUrlVideo() {
+    private fun stopUrlVideo() = PlaybackSessions.onMain {
+        stopUrlVideoInternal()
+    }
+
+    private fun stopUrlVideoInternal() {
         val player = urlVideoPlayer ?: return      // already stopped (failure + a later /stop)
         player.release()
         urlVideoPlayer = null
@@ -631,7 +688,12 @@ class AirPlayReceiver(
     }
 
     /** Starts the AirPlay 2 buffered audio-only stream (type 103, Apple Music → TV); returns its TCP port. */
-    private fun startBufferedAudio(): Int {
+    private fun startBufferedAudio(): Int = PlaybackSessions.onMain {
+        startBufferedAudioInternal()
+    }
+
+    private fun startBufferedAudioInternal(): Int {
+        if (!requestPlayback()) return 0
         bufferedAudioServer?.stop()
         val server = BufferedAudioServer().also { bufferedAudioServer = it; it.start(scope) }
         audioPlaying = true   // buffered audio (type 103) is always audio-only
@@ -641,7 +703,11 @@ class AirPlayReceiver(
     }
 
     /** Stops the buffered audio-only stream (type 103 TEARDOWN). */
-    private fun stopBufferedAudio() {
+    private fun stopBufferedAudio() = PlaybackSessions.onMain {
+        stopBufferedAudioInternal()
+    }
+
+    private fun stopBufferedAudioInternal() {
         bufferedAudioServer?.stop()
         bufferedAudioServer = null
         audioPlaying = false
@@ -714,7 +780,10 @@ class AirPlayReceiver(
 
     private fun dispatchState(state: AirPlayState) {
         // Enqueue directly on Main to preserve connect/end ordering across callbacks.
-        scope.launch(Dispatchers.Main) { onStateChanged(state) }
+        val owner = playbackSessionId
+        scope.launch(Dispatchers.Main) {
+            if (state != AirPlayState.CONNECTED || (owner != -1L && owner == playbackSessionId)) onStateChanged(state)
+        }
     }
 
     companion object {

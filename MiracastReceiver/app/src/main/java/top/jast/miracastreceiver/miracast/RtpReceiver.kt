@@ -80,13 +80,13 @@ class RtpReceiver(
         var active: RtpReceiver? = null
     }
 
-    @Synchronized fun start() {
+    @Synchronized fun start(publishActive: Boolean = true) {
         if (isRunning) {
             Timber.w("RTP Receiver already running")
             return
         }
 
-        active = this
+        if (publishActive) active = this
         isRunning = true
 
         scope.launch { runDecoder() }
@@ -210,7 +210,8 @@ class RtpReceiver(
         return if (headerLength < length) headerLength else -1
     }
 
-    fun stop() {
+    @Synchronized fun stop() {
+        if (!isRunning) return
         isRunning = false
         renderer.requestStop()
         socket?.close()

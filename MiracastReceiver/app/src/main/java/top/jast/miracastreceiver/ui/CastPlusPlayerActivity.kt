@@ -53,6 +53,8 @@ class CastPlusPlayerActivity : AppCompatActivity(), TextureView.SurfaceTextureLi
         token = intent.getStringExtra(CastPlusReceiver.TOKEN)
         receiver = CastPlusReceiver.current
         if (token == null || receiver?.state?.value?.session != token) { finish(); return }
+        val owner = intent.getLongExtra(top.jast.miracastreceiver.service.PlaybackSessions.EXTRA_SESSION, -1L)
+        if (!top.jast.miracastreceiver.service.PlaybackSessions.bind(owner) { finish() }) { finish(); return }
         root = FrameLayout(this).apply { setBackgroundColor(android.graphics.Color.BLACK) }
         textureView = TextureView(this).apply { surfaceTextureListener = this@CastPlusPlayerActivity }
         root.addView(textureView, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))

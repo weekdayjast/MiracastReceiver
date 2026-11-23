@@ -9,8 +9,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpnpSoapNamespaceTest {
-    private fun response(handler: String, service: String, action: String, header: String = "SOAPAction"): org.w3c.dom.Document {
-        val server = UpnpHttpServer(ContextWrapper(null), DlnaMediaRenderer(), "test-device",
+    private fun response(handler: String, service: String, action: String, header: String = "SOAPAction",
+        renderer: DlnaMediaRenderer = DlnaMediaRenderer()): org.w3c.dom.Document {
+        val server = UpnpHttpServer(ContextWrapper(null), renderer, "test-device",
             "Test receiver", "Xiaomi", "MIX 2S", "192.168.2.96")
         val output = ByteArrayOutputStream()
         val method = UpnpHttpServer::class.java.getDeclaredMethod(handler,
@@ -47,5 +48,21 @@ class UpnpSoapNamespaceTest {
         val doc = response("handleAvTransportControl", "AVTransport", "GetTransportInfo")
         assertEquals(1, doc.getElementsByTagNameNS("urn:schemas-upnp-org:service:AVTransport:1", "GetTransportInfoResponse").length)
         assertEquals("NO_MEDIA_PRESENT", doc.getElementsByTagName("CurrentTransportState").item(0).textContent)
+    }
+
+    @Test fun releasedSessionReportsStoppedAndNoPlayableMediaToPollingSender() {
+        val renderer = DlnaMediaRenderer()
+        renderer.setAVTransportURI("http://sender/video.mp4", "old video")
+        renderer.play()
+        renderer.onPlayerStopped(renderer.getMediaSessionId(), releaseMedia = true)
+        fun query(action: String) = response("handleAvTransportControl", "AVTransport", action, renderer = renderer)
+        assertEquals("STOPPED", query("GetTransportInfo").getElementsByTagName("CurrentTransportState").item(0).textContent)
+        val media = query("GetMediaInfo")
+        assertEquals("0", media.getElementsByTagName("NrTracks").item(0).textContent)
+        assertEquals("", media.getElementsByTagName("CurrentURI").item(0).textContent)
+        val position = query("GetPositionInfo")
+        assertEquals("0", position.getElementsByTagName("Track").item(0).textContent)
+        assertEquals("", position.getElementsByTagName("TrackURI").item(0).textContent)
+        assertEquals("", query("GetCurrentTransportActions").getElementsByTagName("Actions").item(0).textContent)
     }
 }

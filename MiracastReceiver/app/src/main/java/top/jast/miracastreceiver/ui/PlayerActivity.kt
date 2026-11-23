@@ -68,6 +68,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.withContext
 import timber.log.Timber
+import top.jast.miracastreceiver.service.PlaybackSessions
 import java.net.URL
 
 /**
@@ -191,6 +192,7 @@ class PlayerActivity : AppCompatActivity() {
     private var exoRotateLayer: FrameLayout? = null
     private var exoRotateTexture: TextureView? = null
     private var currentSpeed = 1f
+    private var playbackSessionId = -1L
 
     // 视频流信息面板
     private val streamInfoTracker = StreamInfoTracker()
@@ -209,6 +211,9 @@ class PlayerActivity : AppCompatActivity() {
 
     private val controlReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.hasExtra(PlaybackSessions.EXTRA_SESSION) == true &&
+                intent.getLongExtra(PlaybackSessions.EXTRA_SESSION, -1L) != playbackSessionId) return
+            if (playbackSessionId != -1L && !PlaybackSessions.isCurrent(playbackSessionId)) return
             if (intent?.action == ACTION_REPLACED) {
                 stopPlayback(endCastSession = true)
                 finish() // Do not finishAffinity: a new protocol player is taking over.
@@ -236,6 +241,7 @@ class PlayerActivity : AppCompatActivity() {
                 ACTION_STOP -> {
                     // A late stop from the previous protocol must not close its replacement.
                     when (intent.getStringExtra(EXTRA_SOURCE_TYPE)) {
+                        "DLNA" -> if (isMirrorSession()) return
                         "AIRPLAY" -> if (!isAirPlayMirrorSession) return
                         "MIRACAST" -> if (!isMiracastSession) return
                     }
@@ -628,11 +634,25 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        val nextSession = intent?.getLongExtra(PlaybackSessions.EXTRA_SESSION, -1L) ?: -1L
+        if (nextSession != -1L && !PlaybackSessions.isCurrent(nextSession)) {
+            if (playbackSessionId == -1L) finish()
+            return
+        }
+        playbackSessionId = nextSession
+        if (nextSession != -1L) PlaybackSessions.bind(nextSession) {
+            stopPlayback(endCastSession = true, releaseDlnaMedia = true)
+            player?.clearMediaItems()
+            updatePublishedMirrorSurface(mirrorSurfaceToken, null, null)
+            mirrorSurfaceView.visibility = View.GONE
+            mirrorRotateLayer.visibility = View.GONE
+            imageView.visibility = View.GONE
+            finish() // A replacement gets a fresh player and Surface publisher.
+        }
         findViewById<SubtitleView>(R.id.airplay_subtitles).apply {
             setCues(emptyList())
             visibility = View.GONE
         }
-        top.jast.miracastreceiver.castplus.CastPlusReceiver.current?.end()
         val nextCastToken = if (intent?.getStringExtra(EXTRA_SOURCE_TYPE) == "CAST")
             intent.getStringExtra(CastPlayerBridge.TOKEN) else null
         if (castToken != null && castToken != nextCastToken) reportCastState("IDLE", "INTERRUPTED", endSession = true)
@@ -1545,6 +1565,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        if (playbackSessionId != -1L && !PlaybackSessions.isCurrent(playbackSessionId)) return
         isPlayerVisible = true
         if (isCurrentImage()) startImageSlideShow() else {
             if (castToken == null) player?.play()
@@ -1667,6 +1688,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (isFinishing && playbackSessionId != -1L) PlaybackSessions.end(playbackSessionId)
         surfacePublisherStopped = true
         screenOnSessionActive = false
         isPlayerVisible = false
@@ -1706,6 +1728,7 @@ class PlayerActivity : AppCompatActivity() {
      * 复用已经在栈里的实例（否则会再叠一个设置页，返回一次才退干净）。
      */
     private fun exitPlayer() {
+        if (playbackSessionId != -1L) PlaybackSessions.end(playbackSessionId)
         if (AppSettings.isReturnToAppAfterCast(this)) {
             startActivity(
                 Intent(this, MainActivity::class.java).apply {
@@ -1722,6 +1745,7 @@ class PlayerActivity : AppCompatActivity() {
     override fun onBackPressed() {
         if (isMirrorSession()) {
             sendBroadcast(Intent("top.jast.miracastreceiver.DISCONNECT_SENDER").apply {
+                putExtra(PlaybackSessions.EXTRA_SESSION, playbackSessionId)
                 setPackage(packageName)
                 putExtra("miracast", isMiracastSession)
             })

@@ -6,6 +6,8 @@ import timber.log.Timber
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.Socket
+import top.jast.miracastreceiver.service.PlaybackSessions
+import top.jast.miracastreceiver.service.PlaybackSessionManager.Source
 
 /**
  * Wi-Fi Display (Miracast) 会话发起器。
@@ -28,7 +30,9 @@ import java.net.Socket
 class WfdServer(
     private val context: Context,
     private val port: Int = 7236,
-    private val rtpPort: Int = 19000
+    private val rtpPort: Int = 19000,
+    private val subnetProvider: (() -> String?)? = null,
+    private val sessionRunner: ((Socket) -> Unit)? = null
 ) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -36,19 +40,23 @@ class WfdServer(
     private var isRunning = false
     @Volatile private var reconnectAfterMs = 0L
 
-    private var sessionHandler: WfdSessionHandler? = null
-    private var rtpReceiver: RtpReceiver? = null
+    private val connections = java.util.concurrent.ConcurrentHashMap<String, Socket>()
+    private val playbacks = java.util.concurrent.ConcurrentHashMap<Socket, () -> Unit>()
+    private val retryAfter = java.util.concurrent.ConcurrentHashMap<String, Long>()
+    private val rtpPorts = mutableSetOf<Int>()
 
     // 与旧实现保持同样的回调签名，服务层无需改动
     var onConnectionRequested: ((clientName: String, clientAddress: String) -> Unit)? = null
     var onConnectionEstablished: ((sessionId: String) -> Unit)? = null
     var onStreamStarted: ((rtpPort: Int) -> Unit)? = null
     var onStreamStopped: (() -> Unit)? = null
+    var onSenderDisconnected: (() -> Unit)? = null
 
     companion object {
         private const val SCAN_INTERVAL_MS = 3_000L
         private const val CONNECT_TIMEOUT_MS = 400
         private const val SCAN_CHUNK = 32          // 每批并发探测的地址数
+        private const val MAX_CONNECTIONS = 8
     }
 
     fun start() {
@@ -66,10 +74,7 @@ class WfdServer(
                         delay(SCAN_INTERVAL_MS)
                         continue
                     }
-                    val socket = dialSource()
-                    if (socket != null) {
-                        runSession(socket)
-                    }
+                    scanSources()
                 } catch (e: Exception) {
                     if (isRunning) Timber.e(e, "WFD session loop error")
                 }
@@ -79,37 +84,63 @@ class WfdServer(
     }
 
     /**
-     * 在 P2P 网段里找到 Source 并**保持**那条连接。
+     * Keep discovering new senders while established sessions run independently.
      *
      * 关键：不能「探测后关闭再重连」—— Source 的监听队列只接受一次连接，探测连接会被它
      * 当成 Sink 正式接入，随后 listener 就关闭了；等我们再连时必然 ECONNREFUSED，
      * 而 Source 那边看到会话刚建立就断开，直接报"连接失败"。
      * 所以扫描成功的那条 socket 直接用作会话连接。
      */
-    private suspend fun dialSource(): Socket? = coroutineScope {
-        val prefix = p2pSubnetPrefix() ?: return@coroutineScope null
+    private suspend fun scanSources() {
+        val prefix = (if (subnetProvider != null) subnetProvider.invoke() else p2pSubnetPrefix()) ?: return
 
         for (chunkStart in 2..254 step SCAN_CHUNK) {
-            if (!isRunning) return@coroutineScope null
+            if (!isRunning || connections.size >= MAX_CONNECTIONS) return
             val range = chunkStart until minOf(chunkStart + SCAN_CHUNK, 255)
-            val connected = range.map { host ->
-                async { tryConnect("$prefix$host") }
-            }.awaitAll().filterNotNull()
-
-            if (connected.isNotEmpty()) {
-                val session = connected.first()
-                connected.drop(1).forEach { runCatching { it.close() } }
-                Timber.i("WFD: connected to source at ${session.inetAddress.hostAddress}:$port")
-                return@coroutineScope session
+            val connected = coroutineScope {
+                range.map { host ->
+                    async {
+                        val ip = "$prefix$host"
+                        if (connections.containsKey(ip) ||
+                            android.os.SystemClock.elapsedRealtime() < (retryAfter[ip] ?: 0L)) null
+                        else tryConnect(ip)
+                    }
+                }.awaitAll().filterNotNull()
+            }
+            for (socket in connected) {
+                val ip = socket.inetAddress.hostAddress
+                if (ip == null) { socket.close(); continue }
+                if (!isRunning || connections.size >= MAX_CONNECTIONS || connections.putIfAbsent(ip, socket) != null) {
+                    socket.close()
+                    continue
+                }
+                Timber.i("WFD: connected to source at $ip:$port")
+                scope.launch {
+                    try {
+                        if (isRunning) {
+                            if (sessionRunner != null) sessionRunner.invoke(socket) else runSession(socket)
+                        }
+                    } catch (error: Exception) {
+                        if (isRunning) Timber.w(error, "WFD sender session failed: $ip")
+                    } finally {
+                        runCatching { socket.close() }
+                        retryAfter[ip] = android.os.SystemClock.elapsedRealtime() + 5000L
+                        connections.remove(ip, socket)
+                    }
+                }
             }
         }
-        null
     }
 
-    private fun tryConnect(ip: String): Socket? = try {
-        Socket().also { it.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS) }
-    } catch (e: Exception) {
-        null
+    private fun tryConnect(ip: String): Socket? {
+        val socket = Socket()
+        return try {
+            socket.connect(InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS)
+            socket
+        } catch (_: Exception) {
+            runCatching { socket.close() }
+            null
+        }
     }
 
     /**
@@ -129,49 +160,79 @@ class WfdServer(
         null
     }
 
-    /** 在已连接的 socket 上跑完整个会话；结束后返回，外层循环继续等待下一次投屏。 */
+    /** Run one source session; discovery continues independently for replacement senders. */
     private fun runSession(socket: Socket) {
+        var owner: top.jast.miracastreceiver.service.PlaybackSessionManager.Session? = null
+        val renderingAllowed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val transportId = java.util.UUID.randomUUID().toString()
+        // Concurrent handshakes must not bind the current sender's UDP port.
+        val sessionRtpPort = synchronized(rtpPorts) {
+            (rtpPort until rtpPort + MAX_CONNECTIONS * 2 step 2).first { rtpPorts.add(it) }
+        }
         val sourceIp = socket.inetAddress.hostAddress ?: "unknown"
         onConnectionRequested?.invoke("Windows PC", sourceIp)
 
         // RTP 接收必须先起来：M3 会把端口告诉 Source，M7 之后随时可能来包。
         // 送显目标复用镜像专用 SurfaceView（与 AirPlay 镜像同一块），
         // 播放页尚未创建时返回 null，解码器会等它就绪。
-        val receiver = RtpReceiver(rtpPort, { top.jast.miracastreceiver.ui.PlayerActivity.miracastSurface }).apply {
+        val receiver = RtpReceiver(sessionRtpPort, {
+            if (renderingAllowed.get()) top.jast.miracastreceiver.ui.PlayerActivity.miracastSurface else null
+        }).apply {
             onError = { Timber.e("Miracast RTP error: $it") }
-            start()
+            start(publishActive = false)
         }
-        rtpReceiver = receiver
-
-        val handler = WfdSessionHandler(context, socket, rtpPort).apply {
-            onSessionEstablished = { onConnectionEstablished?.invoke(it) }
-            onStreamStart = { onStreamStarted?.invoke(it) }
-            onStreamStop = { onStreamStopped?.invoke() }
+        val disconnect = {
+            renderingAllowed.set(false)
+            receiver.stop()
+            // Close just this source. Removing the entire P2P group would also
+            // disconnect the replacement that has already joined it.
+            runCatching { socket.close() }
+            Unit
         }
-        sessionHandler = handler
-        receiver.onVideoRecoveryRequested = {
-            scope.launch {
-                runCatching { handler.requestKeyFrame() }
-                    .onFailure { Timber.w(it, "WFD: keyframe request failed") }
-            }
-        }
+        playbacks[socket] = disconnect
 
         try {
+            if (!isRunning) return
+            val handler = WfdSessionHandler(context, socket, sessionRtpPort).apply {
+                onSessionEstablished = { onConnectionEstablished?.invoke(it) }
+                playbackSessionId = -1L // Bound server sessions must obtain ownership before opening a player.
+                onStreamStart = { port ->
+                    PlaybackSessions.onMain {
+                        owner = PlaybackSessions.begin(context, Source.MIRACAST, transportId, disconnect)
+                        owner?.let {
+                            playbackSessionId = it.id
+                            RtpReceiver.active = receiver
+                            renderingAllowed.set(true)
+                            onStreamStarted?.invoke(port)
+                        } ?: close()
+                    }
+                }
+                onStreamStop = { onStreamStopped?.invoke() }
+            }
+            receiver.onVideoRecoveryRequested = {
+                scope.launch {
+                    runCatching { handler.requestKeyFrame() }
+                        .onFailure { Timber.w(it, "WFD: keyframe request failed") }
+                }
+            }
+
             handler.handleSession()          // 阻塞直到会话结束
         } finally {
+            renderingAllowed.set(false)
             receiver.onVideoRecoveryRequested = null
             receiver.stop()
-            rtpReceiver = null
-            sessionHandler = null
+            playbacks.remove(socket)
+            synchronized(rtpPorts) { rtpPorts.remove(sessionRtpPort) }
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                owner?.let { PlaybackSessions.end(it.id, disconnect = false) }
+            }
         }
     }
 
     fun stop() {
         isRunning = false
-        sessionHandler?.close()
-        sessionHandler = null
-        rtpReceiver?.stop()
-        rtpReceiver = null
+        playbacks.values.toList().forEach { it.invoke() }
+        connections.values.toList().forEach { runCatching { it.close() } }
         scope.cancel()
         Timber.i("WFD session starter stopped")
     }
@@ -180,7 +241,8 @@ class WfdServer(
 
     fun disconnectSender() {
         reconnectAfterMs = android.os.SystemClock.elapsedRealtime() + 5000
-        val current = sessionHandler
-        scope.launch { runCatching { current?.disconnectSender() } }
+        playbacks.values.toList().forEach { it.invoke() }
+        connections.values.toList().forEach { runCatching { it.close() } }
+        onSenderDisconnected?.invoke()
     }
 }

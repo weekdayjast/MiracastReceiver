@@ -19,9 +19,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import java.util.UUID
+import top.jast.miracastreceiver.service.PlaybackSessions
+import top.jast.miracastreceiver.service.PlaybackSessionManager.Source
 
 /** Main-thread adapter to the unmodified Huawei SDK. SDK callbacks never log PINs or device IDs. */
-class CastPlusReceiver(private val context: Context, private val takePlayback: () -> Unit) {
+class CastPlusReceiver(private val context: Context) {
     enum class Status { OFF, UNSUPPORTED, PERMISSION_REQUIRED, STARTING, READY, PAIRING,
         CONNECTING, PLAYING, PAUSED, DISCONNECTING, ERROR }
     data class Request(val token: String, val name: String, val pin: String, val accepted: Boolean = false)
@@ -46,6 +48,7 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
     private var pendingDevice: ProjectionDevice? = null
     private var surface: Surface? = null
     private var closing = false
+    private var playbackSessionId: Long? = null
     private var displayProfile: CastPlusVideoProfile? = null
 
     /** Updates the SDK's capability cache for the next connection; does not tear down playback. */
@@ -147,6 +150,8 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
             Constant.EVENT_ID_CASTING -> if (gate.token != null && !closing)
                 mutableState.value = state.value.copy(status = Status.PLAYING)
             Constant.EVENT_ID_DEVICE_DISCONNECTED -> {
+                val departed = info?.projectionDevice?.deviceId
+                if (departed != null && device != null && departed != device?.deviceId) return
                 // Do not accept a new session until teardown completes (or the SDK is rebound).
                 clearSession()
                 updateDisplayOrientation()
@@ -196,16 +201,21 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
     private fun connected(info: DisplayInfo?) {
         val remote = info?.projectionDevice ?: return
         if (device?.deviceId == remote.deviceId && gate.token != null) return
-        if (closing || device != null) { call { client?.disconnectDevice(remote) }; return }
+        if (device != null && device?.deviceId != remote.deviceId) {
+            end()
+            clearSession()
+        } else if (closing) { call { client?.disconnectDevice(remote) }; return }
         device = remote; pendingDevice = null
         val token = UUID.randomUUID().toString()
         gate.begin(token)
         mutableState.value = State(Status.CONNECTING, token, remote.deviceName.orEmpty(),
             width = info.videoWidth, height = info.videoHeight)
         try {
-            takePlayback()
+            val owner = PlaybackSessions.begin(context, Source.CAST_PLUS) { end(token) } ?: return
+            playbackSessionId = owner.id
             context.startActivity(Intent(context, CastPlusPlayerActivity::class.java).apply {
                 putExtra(TOKEN, token)
+                putExtra(PlaybackSessions.EXTRA_SESSION, owner.id)
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             })
         } catch (e: Exception) { fail("Cannot open Cast+ player", e) }
@@ -240,10 +250,14 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
     fun end(token: String? = gate.token) {
         if (token != null && token != gate.token) return
         val remote = device ?: pendingDevice ?: return
+        val owner = playbackSessionId
+        playbackSessionId = null
+        if (owner != null) PlaybackSessions.end(owner, disconnect = false)
         closing = true
         gate.token?.let(gate::end)
         surface = null
         mutableState.value = State(Status.DISCONNECTING)
+        call { client?.pause(remote) }
         call { client?.disconnectDevice(remote) }
         val generation = epoch
         handler.postDelayed({
@@ -251,6 +265,9 @@ class CastPlusReceiver(private val context: Context, private val takePlayback: (
         }, 5_000)
     }
     private fun clearSession() {
+        val owner = playbackSessionId
+        playbackSessionId = null
+        if (owner != null) PlaybackSessions.end(owner, disconnect = false)
         gate.token?.let(gate::end)
         surface = null; device = null; pendingDevice = null; closing = false
     }

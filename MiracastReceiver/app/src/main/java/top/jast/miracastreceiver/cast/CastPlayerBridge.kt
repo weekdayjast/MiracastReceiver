@@ -6,6 +6,8 @@ import android.os.Handler
 import android.os.Looper
 import top.jast.miracastreceiver.ui.PlayerActivity
 import timber.log.Timber
+import top.jast.miracastreceiver.service.PlaybackSessions
+import top.jast.miracastreceiver.service.PlaybackSessionManager.Source
 
 /** Main-thread adapter. Commands arriving before the Activity is ready are queued per load. */
 class CastPlayerBridge(private val context: Context) {
@@ -31,10 +33,15 @@ class CastPlayerBridge(private val context: Context) {
     private fun load(request: CastLoad) {
         handler.post {
             if (closed) return@post
+            val owner = PlaybackSessions.begin(context, Source.CAST) { interrupt() } ?: run {
+                session.update(CastPlaybackState(request.token, "IDLE", idleReason = "ERROR"))
+                return@post
+            }
             token = request.token; ready = false; pending.clear()
             try {
                 context.startActivity(Intent(context, PlayerActivity::class.java).apply {
                     putExtra(PlayerActivity.EXTRA_SOURCE_TYPE, "CAST")
+                    putExtra(PlaybackSessions.EXTRA_SESSION, owner.id)
                     putExtra(PlayerActivity.EXTRA_MEDIA_URI, request.url)
                     putExtra(PlayerActivity.EXTRA_MEDIA_TITLE, request.title)
                     putExtra(TOKEN, request.token)
@@ -47,6 +54,7 @@ class CastPlayerBridge(private val context: Context) {
             } catch (e: Exception) {
                 Timber.w(e, "Cannot open Cast player")
                 session.update(CastPlaybackState(request.token, "IDLE", idleReason = "ERROR"))
+                PlaybackSessions.end(owner.id)
             }
         }
     }
@@ -88,5 +96,15 @@ class CastPlayerBridge(private val context: Context) {
     fun stop() {
         token?.let { send(CastCommand(it, "STOP")) }
         closed = true; pending.clear(); handler.removeCallbacksAndMessages(null)
+    }
+
+    /** End this load without shutting down Cast discovery or accepting late commands. */
+    private fun interrupt() {
+        token?.let { id ->
+            send(CastCommand(id, "STOP"))
+            session.update(CastPlaybackState(id, "IDLE", idleReason = "INTERRUPTED"))
+            session.endFromPlayer(id)
+        }
+        token = null; ready = false; pending.clear()
     }
 }

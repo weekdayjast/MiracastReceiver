@@ -39,6 +39,7 @@ import android.content.SharedPreferences
 import top.jast.miracastreceiver.utils.NetworkUtils
 import timber.log.Timber
 import java.util.UUID
+import top.jast.miracastreceiver.service.PlaybackSessionManager.Source
 
 /**
  * 投屏接收后台服务
@@ -76,6 +77,7 @@ class CastReceiverService : Service() {
     private var servicesStarted = false
     private lateinit var deviceUuid: String
     private var airPlayPlayerStarted = false
+    private var airPlaySession: PlaybackSessionManager.Session? = null
 
     /** initReceivers() 是否已经跑过：没跑过时那些 lateinit 字段不能碰。 */
     private var initialized = false
@@ -112,12 +114,9 @@ class CastReceiverService : Service() {
             when (intent?.action) {
                 CastPlayerBridge.ACTION_STATE -> castPlayerBridge.onState(intent)
                 "top.jast.miracastreceiver.DISCONNECT_SENDER" -> {
-                    if (intent.getBooleanExtra("miracast", false)) {
-                        wfdServer.disconnectSender()
-                        wifiDirectManager.disconnectSender()
-                    } else {
-                        airPlayReceiver.disconnectSender()
-                    }
+                    val owner = intent.getLongExtra(PlaybackSessions.EXTRA_SESSION, -1L)
+                    if (owner == -1L || !PlaybackSessions.isCurrent(owner)) return
+                    PlaybackSessions.end(owner)
                 }
                 ACTION_UPDATE_POSITION -> {
                     val position = intent.getLongExtra("position", 0L)
@@ -185,12 +184,26 @@ class CastReceiverService : Service() {
             mirrorWidth = mirrorResolution.first,
             mirrorHeight = mirrorResolution.second,
             audioEnabled = true,
+            onPlaybackRequested = {
+                PlaybackSessions.onMain {
+                    if (PlaybackSessions.current(Source.AIRPLAY) == null) {
+                        airPlaySession = PlaybackSessions.begin(this, Source.AIRPLAY) {
+                            airPlaySession = null
+                            airPlayPlayerStarted = false
+                            airPlayReceiver.disconnectSender()
+                        }
+                    }
+                    airPlaySession?.id ?: -1L
+                }
+            },
             videoSurfaceProvider = { top.jast.miracastreceiver.ui.PlayerActivity.airPlaySurface },
             onStateChanged = { state ->
                 Timber.i("AirPlay state: $state")
-                if (state == top.jast.miracastreceiver.airplay.AirPlayState.CONNECTED && !airPlayPlayerStarted) {
+                if (state == top.jast.miracastreceiver.airplay.AirPlayState.CONNECTED && !airPlayPlayerStarted &&
+                    airPlaySession?.id?.let { PlaybackSessions.isCurrent(it) } == true) {
                     airPlayPlayerStarted = true
                     val intent = Intent(this, top.jast.miracastreceiver.ui.PlayerActivity::class.java).apply {
+                        putExtra(PlaybackSessions.EXTRA_SESSION, airPlaySession?.id ?: -1L)
                         putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_TITLE, getString(R.string.title_iphone_mirror))
                         putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_IS_AIRPLAY_MIRROR, true)
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
@@ -198,14 +211,11 @@ class CastReceiverService : Service() {
                     startActivity(intent)
                 }
             },
-            onSessionEnded = {
-                if (airPlayPlayerStarted) {
+            onSessionEnded = { ended ->
+                PlaybackSessions.end(ended, disconnect = false)
+                if (airPlaySession?.id == ended) {
+                    airPlaySession = null
                     airPlayPlayerStarted = false
-                    Timber.i("AirPlay session ended, closing player")
-                    sendBroadcast(Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
-                        setPackage(packageName)
-                        putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SOURCE_TYPE, "AIRPLAY")
-                    })
                 }
             },
             onSenderNameChanged = { sender -> Timber.i("AirPlay sender: $sender") }
@@ -218,13 +228,7 @@ class CastReceiverService : Service() {
         initDlnaServices()
         castPlayerBridge = CastPlayerBridge(this)
         googleCastReceiver = GoogleCastReceiver(this, deviceName, deviceUuid, castPlayerBridge.session)
-        castPlusReceiver = top.jast.miracastreceiver.castplus.CastPlusReceiver(this) {
-            sendBroadcast(Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_REPLACED).setPackage(packageName))
-            airPlayPlayerStarted = false
-            runCatching { airPlayReceiver.disconnectSender() }
-            runCatching { wfdServer.disconnectSender() }
-            dlnaRenderer.setStopped()
-        }
+        castPlusReceiver = top.jast.miracastreceiver.castplus.CastPlusReceiver(this)
         val playerStateFilter = IntentFilter().apply {
             addAction(CastPlayerBridge.ACTION_STATE)
             addAction("top.jast.miracastreceiver.DISCONNECT_SENDER")
@@ -263,6 +267,7 @@ class CastReceiverService : Service() {
 
     private fun initWfdServer() {
         wfdServer = WfdServer(this, 7236).apply {
+            onSenderDisconnected = { wifiDirectManager.disconnectSender() }
             onConnectionRequested = { clientName, clientAddress ->
                 Timber.i("Miracast connection requested: $clientName from $clientAddress")
             }
@@ -273,13 +278,7 @@ class CastReceiverService : Service() {
                 Timber.i("Miracast stream started on RTP port: $rtpPort")
             }
             onStreamStopped = {
-                Timber.i("Miracast stream stopped, closing player")
-                // Windows 断开（RTSP 连接关闭或 TEARDOWN）后必须主动关掉播放页，
-                // 否则手机会一直停在最后一帧画面上
-                sendBroadcast(Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
-                    setPackage(packageName)
-                    putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SOURCE_TYPE, "MIRACAST")
-                })
+                Timber.i("Miracast stream stopped; session owner will release the player")
             }
         }
 
@@ -338,7 +337,18 @@ class CastReceiverService : Service() {
                 putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_MEDIA_TITLE, extractTitle(metadata))
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             }
-            startActivity(intent)
+            // SOAP invokes this callback under the renderer lock. Queue arbitration
+            // rather than blocking that lock while the main thread stops the old owner.
+            val mediaSession = dlnaRenderer.getMediaSessionId()
+            mainHandler.post {
+                if (stopping || mediaSession != dlnaRenderer.getMediaSessionId()) return@post
+                val session = PlaybackSessions.begin(this, Source.DLNA) {
+                    dlnaRenderer.onPlayerStopped(mediaSession, releaseMedia = true)
+                    upnpHttpServer.notifyAvTransportChanged()
+                } ?: return@post
+                intent.putExtra(PlaybackSessions.EXTRA_SESSION, session.id)
+                startActivity(intent)
+            }
         }
 
         dlnaRenderer.onPlay = {
@@ -347,7 +357,7 @@ class CastReceiverService : Service() {
             val intent = Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_PLAY).apply {
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onPause = {
@@ -356,7 +366,7 @@ class CastReceiverService : Service() {
             val intent = Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_PAUSE).apply {
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onStop = {
@@ -365,7 +375,7 @@ class CastReceiverService : Service() {
             val intent = Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onSeek = { position ->
@@ -375,7 +385,7 @@ class CastReceiverService : Service() {
                 putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SEEK_POSITION, position)
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onVolumeChanged = { volume ->
@@ -385,7 +395,7 @@ class CastReceiverService : Service() {
                 putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_VOLUME, volume)
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onSpeedChanged = { speed ->
@@ -395,7 +405,7 @@ class CastReceiverService : Service() {
                 putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SPEED, speed)
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         dlnaRenderer.onQualityUriChanged = { uri ->
@@ -405,7 +415,7 @@ class CastReceiverService : Service() {
                 putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_QUALITY_URI, uri)
                 setPackage(packageName)
             }
-            sendBroadcast(intent)
+            sendDlnaCommand(intent)
         }
 
         // 创建 UPnP HTTP 服务器
@@ -429,6 +439,17 @@ class CastReceiverService : Service() {
         )
     }
 
+    private fun sendDlnaCommand(intent: Intent) {
+        val mediaSession = dlnaRenderer.getMediaSessionId()
+        mainHandler.post {
+            val owner = PlaybackSessions.current(Source.DLNA) ?: return@post
+            if (mediaSession != dlnaRenderer.getMediaSessionId()) return@post
+            intent.putExtra(PlaybackSessions.EXTRA_SESSION, owner.id)
+            intent.putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SOURCE_TYPE, "DLNA")
+            sendBroadcast(intent)
+        }
+    }
+
     private fun extractTitle(metadata: String): String {
         // 简单解析 DIDL-Lite metadata 中的 title
         val titlePattern = Regex("<dc:title>(.*?)</dc:title>", RegexOption.IGNORE_CASE)
@@ -438,6 +459,7 @@ class CastReceiverService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_STOP_CAST) {
+            PlaybackSessions.stop()
             // Stop the service as well as the player: audio can outlive its Surface/Activity.
             airPlayPlayerStarted = false
             sendBroadcast(Intent(top.jast.miracastreceiver.ui.PlayerActivity.ACTION_STOP).apply {
@@ -615,6 +637,7 @@ class CastReceiverService : Service() {
 
     override fun onDestroy() {
         stopping = true
+        PlaybackSessions.stop()
         AppSettings.unobserve(this, nameListener)
         ReceiverStatus.service = ReceiverStatus.Service.STOPPED
         super.onDestroy()

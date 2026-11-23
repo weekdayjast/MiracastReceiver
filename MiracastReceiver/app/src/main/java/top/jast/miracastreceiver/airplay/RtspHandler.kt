@@ -224,6 +224,15 @@ open class RtspHandler(
                 val clientSocket = serverSocket!!.accept()
                 Logger.i("New client connected: ${clientSocket.inetAddress.hostAddress}")
 
+                // A different sender replaces the primary session. Wait for its
+                // cleanup before reusing the handshake/stream state. Extra HTTP
+                // channels from the same sender still belong to its live session.
+                val previous = activeClient
+                if (previous != null && previous.inetAddress != clientSocket.inetAddress) {
+                    disconnectSender()
+                    while (running && activeClient === previous) Thread.sleep(10)
+                    if (!running) { clientSocket.close(); break }
+                }
                 if (activeClient != null) {
                     // A session is already live on another connection. iOS opens EXTRA connections
                     // to hand a full-screen video off from a mirror (POST /reverse + POST /play) —

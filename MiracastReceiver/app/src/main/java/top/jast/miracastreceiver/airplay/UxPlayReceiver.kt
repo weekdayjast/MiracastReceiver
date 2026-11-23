@@ -27,6 +27,7 @@ internal class UxPlayReceiver(
     private val onAdvertising: (String) -> Unit,
     private val onError: () -> Unit,
     initialResolution: Pair<Int, Int> = 1920 to 1080,
+    private val onPlaybackRequested: () -> Boolean = { true },
 ) : RaopCallbackHandler {
     @Volatile private var displayResolution = initialResolution
     private val main = Handler(Looper.getMainLooper())
@@ -265,8 +266,8 @@ internal class UxPlayReceiver(
         nativeWorker.shutdown()
     }
 
-    fun disconnectSender() = main.post {
-        if (stopped || handle == 0L) return@post
+    fun disconnectSender() = top.jast.miracastreceiver.service.PlaybackSessions.onMain {
+        if (stopped || handle == 0L) return@onMain
         stopVideo()
         mirrorRunning = false
         mirrorFrames.sessionChanged(false)
@@ -300,6 +301,7 @@ internal class UxPlayReceiver(
     override fun onVideoPlay(location: String, startPositionSeconds: Float) {
         main.post {
             if (stopped) return@post
+            if (!onPlaybackRequested()) return@post
             hlsPlaying = true
             desiredRate = 1f
             desiredSeek = null
@@ -400,6 +402,7 @@ internal class UxPlayReceiver(
             if (stopped) return@post
             mirrorRunning = running
             if (running) {
+                if (!onPlaybackRequested()) return@post
                 UxPlaySubtitles.cues.value = emptyList()
                 mirror.startSession()
                 if (!hlsPlaying) { onConnected(); attachMirrorSurface() }
@@ -414,6 +417,10 @@ internal class UxPlayReceiver(
         main.post {
             if (stopped || handle == 0L) return@post
             mirrorAudio = usingScreen
+            if (!hlsPlaying) {
+                if (!onPlaybackRequested()) return@post
+                onConnected()
+            }
             if (usingScreen && !hlsPlaying) {
                 NativeBridge.nativeServerAudioStart(handle)
                 NativeBridge.nativeServerAudioFormat(handle, ct, spf)

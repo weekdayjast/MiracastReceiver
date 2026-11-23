@@ -43,6 +43,7 @@ class WfdSessionHandler(
     private var presentationUrl = ""
     private var playRequested = false
     @Volatile private var playing = false
+    var playbackSessionId: Long? = null
     private var lastIdrRequestMs = -1_000L
     @Volatile private var idrRequestCseq = -1
     @Volatile private var idrUnsupported = false
@@ -280,7 +281,10 @@ class WfdSessionHandler(
             .find(msg)?.groupValues?.get(1)?.trim()
 
     private fun startPlayerActivity() {
+        val owner = playbackSessionId
+        if (owner != null && !top.jast.miracastreceiver.service.PlaybackSessions.isCurrent(owner)) return
         val intent = Intent(context, top.jast.miracastreceiver.ui.PlayerActivity::class.java).apply {
+            putExtra(top.jast.miracastreceiver.service.PlaybackSessions.EXTRA_SESSION, owner ?: -1L)
             putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SOURCE_TYPE, "MIRACAST")
             putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_RTP_PORT, rtpPort)
             putExtra(top.jast.miracastreceiver.ui.PlayerActivity.EXTRA_SESSION_ID, sessionId)

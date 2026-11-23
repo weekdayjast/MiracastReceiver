@@ -247,7 +247,7 @@ class UpnpHttpServer(
             "GetPositionInfo" -> {
                 val state = renderer.getState()
                 val content = """
-                    <Track>1</Track>
+                    <Track>${if (state.uri.isBlank()) 0 else 1}</Track>
                     <TrackDuration>${SoapParser.formatTime(state.duration)}</TrackDuration>
                     <TrackMetaData>${SoapParser.escapeXml(state.metadata)}</TrackMetaData>
                     <TrackURI>${SoapParser.escapeXml(state.uri)}</TrackURI>
@@ -261,7 +261,7 @@ class UpnpHttpServer(
             "GetMediaInfo" -> {
                 val state = renderer.getState()
                 val content = """
-                    <NrTracks>1</NrTracks>
+                    <NrTracks>${if (state.uri.isBlank()) 0 else 1}</NrTracks>
                     <MediaDuration>${SoapParser.formatTime(state.duration)}</MediaDuration>
                     <CurrentURI>${SoapParser.escapeXml(state.uri)}</CurrentURI>
                     <CurrentURIMetaData>${SoapParser.escapeXml(state.metadata)}</CurrentURIMetaData>
@@ -274,7 +274,8 @@ class UpnpHttpServer(
                 buildSoapResponse(action, content)
             }
             "GetCurrentTransportActions" -> {
-                val content = "<Actions>Play,Pause,Stop,Seek</Actions>"
+                val actions = if (renderer.getState().uri.isBlank()) "" else "Play,Pause,Stop,Seek"
+                val content = "<Actions>$actions</Actions>"
                 buildSoapResponse(action, content)
             }
             "GetTransportSettings" -> {
@@ -292,6 +293,9 @@ class UpnpHttpServer(
         }
 
         sendSoapResponse(output, response)
+        if (action in setOf("SetAVTransportURI", "Play", "Pause", "Stop", "Seek")) {
+            notifyAvTransportChanged()
+        }
     }
 
     private fun handleRenderingControl(output: OutputStream, body: String, headers: Map<String, String>) {
@@ -436,7 +440,12 @@ class UpnpHttpServer(
                 "&lt;TransportStatus val=&quot;OK&quot;/&gt;" +
                 "&lt;AVTransportURI val=&quot;$uri&quot;/&gt;" +
                 "&lt;AVTransportURIMetaData val=&quot;$metadata&quot;/&gt;" +
-                "&lt;CurrentTrackURI val=&quot;$uri&quot;/&gt;")
+                "&lt;CurrentTrackURI val=&quot;$uri&quot;/&gt;" +
+                "&lt;CurrentTrackMetaData val=&quot;$metadata&quot;/&gt;" +
+                "&lt;NumberOfTracks val=&quot;${if (state.uri.isBlank()) 0 else 1}&quot;/&gt;" +
+                "&lt;CurrentTrack val=&quot;${if (state.uri.isBlank()) 0 else 1}&quot;/&gt;" +
+                "&lt;CurrentTrackDuration val=&quot;${SoapParser.formatTime(state.duration)}&quot;/&gt;" +
+                "&lt;CurrentTransportActions val=&quot;${if (state.uri.isBlank()) "" else "Play,Pause,Stop,Seek"}&quot;/&gt;")
         } else {
             val mute = if (state.muted) 1 else 0
             "RCS" to ("&lt;Volume channel=&quot;Master&quot; val=&quot;${state.volume}&quot;/&gt;" +
