@@ -23,8 +23,8 @@ android {
         applicationId = "top.jast.miracastreceiver"
         minSdk = 21
         targetSdk = 36
-        versionCode = 25
-        versionName = "1.2.16"
+        versionCode = 26
+        versionName = "1.2.17"
         buildConfigField("boolean", "USE_UXPLAY", useUxPlay.toString())
         if (useUxPlay) minSdk = 23
 
