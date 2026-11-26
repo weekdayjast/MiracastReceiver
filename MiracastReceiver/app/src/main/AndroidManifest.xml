@@ -13,10 +13,13 @@
     <uses-permission android:name="com.huawei.hms.kitframework.permission.BIND_ENGINE_FRAMEWORK_SERVICE" />
     <uses-permission android:name="com.huawei.hms.kitframework.permission.REQUEST_AUTHENTICATION" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
-    <!-- Wi-Fi Direct 需要定位权限。Android 12+ 只申请 FINE 会被系统拒绝，必须同时声明 COARSE。 -->
+    <!-- Android 12 及以下的 Wi-Fi Direct 与 Cast+ SDK 保留定位权限；Android 12+ 必须同时声明 FINE 和 COARSE。 -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
+    <!-- Wi-Fi Direct 不推导物理位置，Android 13+ 使用附近设备权限时无需额外开启定位。 -->
+    <uses-permission
+        android:name="android.permission.NEARBY_WIFI_DEVICES"
+        android:usesPermissionFlags="neverForLocation" />
 
     <!-- Wi-Fi Direct / Miracast 发现 -->
     <uses-feature

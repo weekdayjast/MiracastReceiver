@@ -65,6 +65,13 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            // root 需要从 nativeLibraryDir 执行 libwfdctl.so，安装时必须将它解压到磁盘。
+            useLegacyPackaging = true
+        }
+    }
+
     // 应用内可切换界面语言，AAB 不能按语言拆包，否则切到设备没下载的语言会缺资源
     bundle {
         language {
