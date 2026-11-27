@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.wifi.WifiManager
 import android.net.wifi.WpsInfo
 import android.net.wifi.p2p.WifiP2pConfig
 import android.net.wifi.p2p.WifiP2pDevice
@@ -36,12 +37,18 @@ class WifiDirectManager(
     private val manager: WifiP2pManager? by lazy {
         context.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
     }
+    private val wifiManager: WifiManager? by lazy {
+        context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+    }
 
     private var channel: WifiP2pManager.Channel? = null
     private var receiver: BroadcastReceiver? = null
     private var isStarted = false
+    private var hasReportedGroup = false
+    private var p2pUnsupported = false
     private val mainHandler = Handler(Looper.getMainLooper())
     private val refreshDiscovery = Runnable { refreshPeerDiscovery() }
+    private val recoverGroup = Runnable { ensureGroup() }
     enum class StartupState { STARTING, UNSUPPORTED, PERMISSION_REQUIRED, WIFI_DISABLED, FAILED }
     var onStartupState: ((StartupState) -> Unit)? = null
     var onWfdConfigured: (() -> Unit)? = null
@@ -90,6 +97,8 @@ class WifiDirectManager(
             registerLocalService()
 
             isStarted = true
+            mainHandler.removeCallbacks(refreshDiscovery)
+            mainHandler.postDelayed(refreshDiscovery, 90_000L)
             Timber.i("Wi-Fi Direct started for Miracast")
         } catch (e: SecurityException) {
             onStartupState?.invoke(StartupState.PERMISSION_REQUIRED)
@@ -179,13 +188,11 @@ class WifiDirectManager(
                     manager?.requestGroupInfo(ch) { group ->
                         if (group != null) {
                             Timber.i("Group created - SSID: ${group.networkName}, Owner: ${group.isGroupOwner}")
-                            onGroupCreated?.invoke(group)
-                            schedulePeerDiscovery()
-
-                            // 设置设备名称
-                            setDeviceName(deviceName)
+                            onGroupReady(group)
                         } else {
-                            onStartupState?.invoke(StartupState.FAILED)
+                            // onSuccess 只表示框架已受理请求，组信息可能稍后通过连接广播就绪
+                            Timber.i("Group info not ready yet after createGroup, scheduling recovery check")
+                            scheduleGroupRecovery(3_000L)
                         }
                     }
                 }
@@ -205,16 +212,20 @@ class WifiDirectManager(
                         manager?.requestGroupInfo(ch) { group ->
                             if (group != null) {
                                 Timber.i("Existing group found: ${group.networkName}")
-                                onGroupCreated?.invoke(group)
-                                schedulePeerDiscovery()
-                                setDeviceName(deviceName)
+                                onGroupReady(group)
                             } else {
                                 onStartupState?.invoke(StartupState.FAILED)
                             }
                         }
                     } else {
-                        onStartupState?.invoke(if (reason == WifiP2pManager.P2P_UNSUPPORTED)
-                            StartupState.UNSUPPORTED else StartupState.FAILED)
+                        if (reason == WifiP2pManager.P2P_UNSUPPORTED) {
+                            p2pUnsupported = true
+                            mainHandler.removeCallbacks(refreshDiscovery)
+                            mainHandler.removeCallbacks(recoverGroup)
+                            onStartupState?.invoke(StartupState.UNSUPPORTED)
+                        } else {
+                            onStartupState?.invoke(StartupState.FAILED)
+                        }
                     }
                 }
             })
@@ -297,21 +308,68 @@ class WifiDirectManager(
         }
     }
 
+    private fun onGroupReady(group: WifiP2pGroup) {
+        hasReportedGroup = true
+        mainHandler.removeCallbacks(recoverGroup)
+        onGroupCreated?.invoke(group)
+        schedulePeerDiscovery()
+        setDeviceName(deviceName)
+    }
+
+    private fun scheduleGroupRecovery(delayMs: Long) {
+        if (!isStarted || p2pUnsupported) return
+        mainHandler.removeCallbacks(recoverGroup)
+        mainHandler.postDelayed(recoverGroup, delayMs)
+    }
+
+    private fun ensureGroup() {
+        val ch = channel ?: return
+        if (!isStarted || p2pUnsupported || wifiManager?.isWifiEnabled == false) return
+        try {
+            manager?.requestGroupInfo(ch) { group ->
+                if (!isStarted || channel !== ch || p2pUnsupported) return@requestGroupInfo
+                if (group != null) {
+                    if (group.isGroupOwner && !hasReportedGroup) onGroupReady(group)
+                } else if (wifiManager?.isWifiEnabled != false) {
+                    hasReportedGroup = false
+                    Timber.i("P2P group missing, recreating for Miracast")
+                    createGroup()
+                }
+            }
+        } catch (e: SecurityException) {
+            onStartupState?.invoke(StartupState.PERMISSION_REQUIRED)
+            Timber.w(e, "Wi-Fi Direct permission required during group recovery")
+        }
+    }
+
     private fun schedulePeerDiscovery() {
         mainHandler.removeCallbacks(refreshDiscovery)
-        mainHandler.post(refreshDiscovery)
+        // 等 TETHER_INTERFACE_STATE_CHANGED 完成切入 GroupCreatedState，避免在 GroupNegotiationState 被拒
+        mainHandler.postDelayed(refreshDiscovery, 1_000L)
     }
 
     private fun refreshPeerDiscovery() {
         val ch = channel ?: return
-        if (!isStarted) return
+        if (!isStarted || p2pUnsupported) return
 
         // Android 会在超时或移除 P2P 组时结束发现。空闲时刷新，避免干扰已连接的发送端。
         mainHandler.postDelayed(refreshDiscovery, 90_000L)
         try {
             manager?.requestGroupInfo(ch) { group ->
-                if (!isStarted || channel !== ch || group == null || !group.isGroupOwner ||
-                    group.clientList.isNotEmpty()) return@requestGroupInfo
+                if (!isStarted || channel !== ch) return@requestGroupInfo
+                if (group == null) {
+                    hasReportedGroup = false
+                    if (wifiManager?.isWifiEnabled != false) {
+                        Timber.i("P2P group missing during periodic check, recreating group")
+                        createGroup()
+                    }
+                    return@requestGroupInfo
+                }
+                if (!hasReportedGroup && group.isGroupOwner) {
+                    onGroupReady(group)
+                    return@requestGroupInfo
+                }
+                if (!group.isGroupOwner || group.clientList.isNotEmpty()) return@requestGroupInfo
                 try {
                     manager?.discoverPeers(ch, object : WifiP2pManager.ActionListener {
                         override fun onSuccess() {
@@ -333,6 +391,7 @@ class WifiDirectManager(
 
     private fun registerReceiver() {
         val intentFilter = IntentFilter().apply {
+            addAction(WifiManager.WIFI_STATE_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
             addAction(WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION)
@@ -342,10 +401,29 @@ class WifiDirectManager(
         receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
                 when (intent.action) {
+                    WifiManager.WIFI_STATE_CHANGED_ACTION -> {
+                        val state = intent.getIntExtra(WifiManager.EXTRA_WIFI_STATE, WifiManager.WIFI_STATE_UNKNOWN)
+                        if (state == WifiManager.WIFI_STATE_DISABLED) {
+                            hasReportedGroup = false
+                            mainHandler.removeCallbacks(recoverGroup)
+                            onStartupState?.invoke(StartupState.WIFI_DISABLED)
+                        } else if (state == WifiManager.WIFI_STATE_ENABLED && !isInitialStickyBroadcast) {
+                            // 三星等机型重开 Wi-Fi 后 P2P 会停在 P2pDisabledState，需主动建组唤醒并重注 WFD IE
+                            Timber.i("Wi-Fi enabled, scheduling P2P group recovery")
+                            hasReportedGroup = false
+                            scheduleGroupRecovery(2_000L)
+                        }
+                    }
+
                     WifiP2pManager.WIFI_P2P_STATE_CHANGED_ACTION -> {
                         val state = intent.getIntExtra(WifiP2pManager.EXTRA_WIFI_STATE, -1)
                         val enabled = state == WifiP2pManager.WIFI_P2P_STATE_ENABLED
-                        if (!enabled) onStartupState?.invoke(StartupState.WIFI_DISABLED)
+                        if (!enabled) {
+                            hasReportedGroup = false
+                            onStartupState?.invoke(StartupState.WIFI_DISABLED)
+                        } else if (!isInitialStickyBroadcast) {
+                            scheduleGroupRecovery(2_000L)
+                        }
                         Timber.d("Wi-Fi P2P state changed: ${if (enabled) "ENABLED" else "DISABLED"}")
                     }
 
@@ -366,13 +444,21 @@ class WifiDirectManager(
 
                     WifiP2pManager.WIFI_P2P_CONNECTION_CHANGED_ACTION -> {
                         Timber.d("Wi-Fi P2P connection changed")
+                        val sticky = isInitialStickyBroadcast
                         channel?.let { ch ->
                             manager?.requestConnectionInfo(ch) { info ->
+                                if (!isStarted || channel !== ch) return@requestConnectionInfo
                                 if (info.groupFormed) {
                                     Timber.i("P2P Group formed - Group Owner: ${info.isGroupOwner}")
 
                                     if (info.isGroupOwner) {
                                         Timber.i("This device is Group Owner, IP: ${info.groupOwnerAddress?.hostAddress}")
+                                        if (!hasReportedGroup) ensureGroup()
+                                    }
+                                } else if (!sticky) {
+                                    hasReportedGroup = false
+                                    if (wifiManager?.isWifiEnabled == true) {
+                                        scheduleGroupRecovery(3_000L)
                                     }
                                 }
                             }
@@ -403,6 +489,9 @@ class WifiDirectManager(
     fun stop() {
         if (!isStarted) return
         mainHandler.removeCallbacks(refreshDiscovery)
+        mainHandler.removeCallbacks(recoverGroup)
+        hasReportedGroup = false
+        p2pUnsupported = false
 
         try {
             // 移除本地服务
@@ -448,6 +537,7 @@ class WifiDirectManager(
     /** Drop the current sender's P2P link, then prepare a fresh receiving group. */
     fun disconnectSender() {
         val ch = channel ?: return
+        hasReportedGroup = false
         manager?.removeGroup(ch, object : WifiP2pManager.ActionListener {
             override fun onSuccess() {
                 if (isStarted && channel === ch) createGroup()
