@@ -587,6 +587,27 @@ class CastReceiverService : Service() {
         }.getOrDefault(false)
         if (systemEnabled) {
             ReceiverStatus.miracast = ReceiverStatus.Miracast.SYSTEM_MANAGED
+            // The switch alone does not prove that this ROM advertises a WFD sink.
+            // If it ships a system-uid executor, inject the IE through the framework.
+            if (rootAdvertisingPending) return
+            rootAdvertisingPending = true
+            rootAdvertisingAttempted = true
+            val appContext = applicationContext
+            Timber.i("Miracast: wifi_display_on=1, trying vendor system executor")
+            wfdRootExecutor.execute {
+                val ok = runCatching {
+                    WfdRootHelper.isSystemExecutorAvailable(appContext) &&
+                        WfdRootHelper.advertiseViaSystemExecutor(appContext)
+                }.getOrDefault(false)
+                mainHandler.post {
+                    rootAdvertisingPending = false
+                    if (!stopping && ok) {
+                        rootAdvertisingActive = true
+                        ReceiverStatus.miracast = ReceiverStatus.Miracast.ADVERTISING
+                        Timber.i("Miracast startup: injected sink IE via vendor system executor")
+                    }
+                }
+            }
             return
         }
         if (rootAdvertisingPending) return
@@ -603,9 +624,15 @@ class CastReceiverService : Service() {
                     rootAdvertisingActive = result == WfdRootHelper.AdvertiseResult.COMMAND_SENT
                     syncRootDeviceName()
                     ReceiverStatus.miracast = p2pFailure ?: when {
-                        wifiDirectManager.isWfdConfigured -> ReceiverStatus.Miracast.ADVERTISING
-                        result == WfdRootHelper.AdvertiseResult.COMMAND_SENT -> ReceiverStatus.Miracast.ADVERTISING
-                        result == WfdRootHelper.AdvertiseResult.ROOT_UNAVAILABLE -> ReceiverStatus.Miracast.ROOT_REQUIRED
+                        // This attempt's result wins; a stale app-side flag cannot
+                        // report ADVERTISING after a failed framework attempt.
+                        result == WfdRootHelper.AdvertiseResult.COMMAND_SENT ->
+                            ReceiverStatus.Miracast.ADVERTISING
+                        result == WfdRootHelper.AdvertiseResult.ROOT_UNAVAILABLE &&
+                            wifiDirectManager.isWfdConfigured ->
+                            ReceiverStatus.Miracast.ADVERTISING
+                        result == WfdRootHelper.AdvertiseResult.ROOT_UNAVAILABLE ->
+                            ReceiverStatus.Miracast.ROOT_REQUIRED
                         else -> ReceiverStatus.Miracast.SETUP_FAILED
                     }
                     Timber.i("Miracast startup: %s (%s)", ReceiverStatus.miracast, result)
