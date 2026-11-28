@@ -102,6 +102,8 @@ class WifiDirectManager(
 
     private fun setWfdInfo() {
         val ch = channel ?: return
+        // Never let a previous attempt's success decide this attempt's state.
+        isWfdConfigured = false
 
         try {
             // 尝试使用反射设置 WFD Info（需要系统权限，但值得一试）

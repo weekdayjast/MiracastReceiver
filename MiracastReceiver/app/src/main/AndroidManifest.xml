@@ -50,6 +50,7 @@
     <queries>
         <package android:name="com.huawei.hms.kitframework" />
         <package android:name="com.huawei.dmsdpdevice" />
+        <package android:name="com.jmgo.systemapi" />
     </queries>
 
     <application

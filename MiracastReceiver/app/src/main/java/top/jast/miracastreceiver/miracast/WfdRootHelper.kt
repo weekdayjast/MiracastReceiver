@@ -3,7 +3,6 @@ package top.jast.miracastreceiver.miracast
 import android.content.Context
 import timber.log.Timber
 import java.io.File
-
 /**
  * 通过 root 向 wpa_supplicant 注入 Wi-Fi Display Sink 的 WFD IE。
  *
@@ -19,6 +18,10 @@ object WfdRootHelper {
     enum class AdvertiseResult { COMMAND_SENT, ROOT_UNAVAILABLE, HELPER_MISSING, SOCKET_UNAVAILABLE, COMMAND_FAILED }
 
     private const val BINARY_NAME = "libwfdctl.so"
+
+    /** Token of the successful framework advertisement, used for symmetric stop. */
+    @Volatile private var lastFrameworkToken: String? = null
+    @Volatile private var lastFrameworkPort: Int = 7236
 
     /** wpa_supplicant 控制 socket 的常见位置，按新旧顺序尝试。 */
     private val CTRL_SOCKET_PATHS = listOf(
@@ -36,7 +39,8 @@ object WfdRootHelper {
      * 前面的 0006 是子元素长度字段，wpa_supplicant 要求连长度一起给。
      */
     private fun subelemHex(controlPort: Int, maxThroughputMbps: Int = 50): String =
-        "0006" + "0011" + "%04x".format(controlPort) + "%04x".format(maxThroughputMbps)
+        "0006" + "0011" +
+            "%04x".format(controlPort) + "%04x".format(maxThroughputMbps)
 
     /**
      * 注入 WFD IE，让本机以 Miracast Sink 的身份被发现。
@@ -48,7 +52,17 @@ object WfdRootHelper {
         advertiseSinkResult(context, controlPort) == AdvertiseResult.COMMAND_SENT
 
     fun advertiseSinkResult(context: Context, controlPort: Int = 7236): AdvertiseResult {
-        if (!isRootAvailable()) return AdvertiseResult.ROOT_UNAVAILABLE
+        if (!isRootAvailable()) {
+            // No su on this device. Some vendor ROMs ship a system-uid executor; use it
+            // to run the framework API without widening any system path permissions.
+            if (!isSystemExecutorAvailable(context)) return AdvertiseResult.ROOT_UNAVAILABLE
+            return if (advertiseViaSystemExecutor(context, controlPort)) {
+                AdvertiseResult.COMMAND_SENT
+            } else {
+                // A failed/timed-out framework call must not surface as ROOT_UNAVAILABLE.
+                AdvertiseResult.COMMAND_FAILED
+            }
+        }
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) {
             Timber.w("WFD: $BINARY_NAME not found in nativeLibraryDir")
@@ -74,6 +88,48 @@ object WfdRootHelper {
         }
     }
 
+    /**
+     * 无 root 路径：借厂商的 system(uid 1000) 执行器跑 [WfdSystemMain]。
+     *
+     * 只走 framework 路径：它由 ActionListener 返回真实结果，且不需要放宽
+     * /data/vendor 或 supplicant socket 的权限。framework 不可用时返回 false，
+     * 不再用 777/666 打开系统路径。
+     */
+    fun advertiseViaSystemExecutor(context: Context, controlPort: Int = 7236): Boolean =
+        advertiseViaFramework(context, controlPort)
+
+    /**
+     * 以 uid 1000 运行 [WfdSystemMain]（app_process），直接调用框架的
+     * `WifiP2pManager.setWFDInfo()`。
+     *
+     * 每次运行使用独立 token，helper 把本次 ActionListener 的真实结果写到
+     * `debug.jmgo.wfd.framework.<token>`；旧的成功属性不会被误读。
+     */
+    fun advertiseViaFramework(context: Context, controlPort: Int = 7236): Boolean {
+        val apk = context.applicationInfo?.sourceDir ?: return false
+        val token = System.nanoTime().toString()
+        val resultProp = "debug.jmgo.wfd.framework.$token"
+        val cmd = "/system/bin/app_process -Djava.class.path=$apk /system/bin " +
+            "top.jast.miracastreceiver.miracast.WfdSystemMain $controlPort $token"
+        SystemExecClient.exec(context, cmd, 25_000)
+        val value = readSystemProperty(resultProp)
+        val ok = value == "success"
+        if (ok) {
+            lastFrameworkToken = token
+            lastFrameworkPort = controlPort
+        }
+        Timber.i("WFD: framework setWFDInfo %s (result=%s)", if (ok) "ok" else "failed", value)
+        return ok
+    }
+
+    private fun readSystemProperty(key: String): String? = runCatching {
+        val sp = Class.forName("android.os.SystemProperties")
+        sp.getMethod("get", String::class.java).invoke(null, key) as? String
+    }.getOrNull()
+
+    /** 该固件是否提供 system 级执行器（com.jmgo.systemapi）。 */
+    fun isSystemExecutorAvailable(context: Context): Boolean = SystemExecClient.isInstalled(context)
+
     /** Rename the native P2P device after this service has already enabled WFD via root. */
     fun setDeviceName(context: Context, displayName: String): Boolean {
         val name = P2pDeviceName.fromDisplayName(displayName) ?: return false
@@ -90,8 +146,25 @@ object WfdRootHelper {
         return true
     }
 
-    /** 撤销 WFD 广播（关闭投屏接收时调用，避免一直对外宣告自己是显示器）。 */
+    /** 撤销 WFD 广播（关闭投屏接收/退出应用时调用），走与启用相同的路径。 */
     fun stopAdvertising(context: Context): Boolean {
+        val advertised = lastFrameworkToken
+        // Also run a best-effort framework disable when the advertisement may have been
+        // left behind by a previous process (app killed while enabling) or a restart.
+        if (advertised != null || isSystemExecutorAvailable(context)) {
+            val apk = context.applicationInfo?.sourceDir ?: return false
+            val token = System.nanoTime().toString()
+            val resultProp = "debug.jmgo.wfd.framework.$token"
+            val cmd = "/system/bin/app_process -Djava.class.path=$apk /system/bin " +
+                "top.jast.miracastreceiver.miracast.WfdSystemMain $lastFrameworkPort $token disable"
+            SystemExecClient.exec(context, cmd, 25_000)
+            val value = readSystemProperty(resultProp)
+            val ok = value == "success"
+            if (ok) lastFrameworkToken = null
+            Timber.i("WFD: framework stop %s (result=%s)", if (ok) "ok" else "failed", value)
+            if (ok || advertised != null) return ok
+        }
+        // Root fallback for devices that advertised through the su helper.
         val binary = File(context.applicationInfo.nativeLibraryDir, BINARY_NAME)
         if (!binary.exists()) return false
         val socketPath = CTRL_SOCKET_PATHS.firstOrNull { runAsRoot("ls $it") } ?: return false

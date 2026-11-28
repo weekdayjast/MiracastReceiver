@@ -20,7 +20,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "top.jast.miracastreceiver"
+        applicationId = providers.gradleProperty("jmgoPackageId").orNull
+            ?: "top.jast.miracastreceiver"
         minSdk = 21
         targetSdk = 36
         versionCode = 26
